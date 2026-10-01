@@ -2,16 +2,20 @@
 
 # 🌌 Vela — AI Novel Writing IDE / AI 小说创作 IDE
 
-**The next-generation AI-powered novel & fiction writing IDE for web novel authors, indie writers and creative professionals.**
+**把「世界观 → 大纲 → 正文 → 重写 → 精修 → 审稿」整条小说写作流水线，装进一个本地运行的桌面 IDE。**
 
-**为网文作者、独立作家与创意写作者设计的下一代 AI 驱动小说创作集成开发环境。**
+**An AI-powered novel writing IDE for web novel authors, indie writers and creative professionals — local-first, BYOK, GPL-3.0.**
 
-[![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
-[![Electron](https://img.shields.io/badge/Electron-Latest-black.svg)](https://www.electronjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6.svg)](https://www.typescriptlang.org/)
+[![Build](https://github.com/Kimcop-kc/vela/actions/workflows/build-windows.yml/badge.svg)](https://github.com/Kimcop-kc/vela/actions/workflows/build-windows.yml)
+[![Release](https://img.shields.io/github/v/release/Kimcop-kc/vela?color=blue&label=release)](https://github.com/Kimcop-kc/vela/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Kimcop-kc/vela/total?color=green&label=downloads)](https://github.com/Kimcop-kc/vela/releases)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](#-安装与使用--installation)
 
-[🚀 下载客户端 / Download](#-安装与使用--installation) • [🌟 API 渠道推荐 / Fluxion AI](#fluxion-ai)
+### ⬇️ [**点此下载最新版 Vela**](https://github.com/Kimcop-kc/vela/releases/latest) — macOS（Apple 芯片 / Intel）· Windows x64
+
+[🚀 安装与使用](#-安装与使用--installation) • [✨ 核心特性](#-核心特性--key-features) • [⚙️ 模型配置](#️-模型配置--model-configuration) • [❓ 常见问题](#-常见问题--faq) • [🌟 API 渠道推荐](#fluxion-ai)
+
 </div>
 
 > 💡 **写小说不想折腾 Key？** 试试 [Fluxion AI](https://fluxionai.space/register?source=github&campaign=vela&promo=VELA) —— 一个入口接入并管理全球主流 AI 模型，OpenAI 兼容、开箱即用，**注册即送 $3 API 额度**。👉 [立即领取](https://fluxionai.space/register?source=github&campaign=vela&promo=VELA)
@@ -19,6 +23,13 @@
 ---
 
 > **Vela** 是一款开源、隐私优先、本地优先的 AI 写作 IDE，专为**长篇小说创作 (Novel Writing)**、**网文写手 (Web Fiction)**与**创意写作 (Creative Writing)** 而生。它将大语言模型驱动的全流程工作流（大纲生成、章节起草、智能重写、自动审阅）与本地 RAG 知识库深度融合，为作者提供 IDE 级别的沉浸式创作体验——所有数据和模型调用都运行在您自己的计算机上，使用您自己的 API Key (BYOK)。
+
+### 为什么选择 Vela？
+
+- 🧬 **不是聊天框，是一条流水线**：世界观 → 大纲 → 细纲 → 正文 → 重写 → 精修 → 审稿，每个环节都在应用里点得到，不用在几个工具之间来回复制粘贴。
+- 🧠 **百万字设定记得住**：本地向量检索 (RAG) 会按当前章节的语义自动召回相关设定，写到几百章也不容易人设崩塌、伏笔断裂。
+- 🔒 **稿子不出本机**：工程文件、知识库、对话记录都存你自己的电脑；只有你主动点击生成时，内容才会发给你自己配置的模型服务商。
+- 🖥️ **IDE 级手感**：可拖拽四分屏（文件树 / 编辑器 / AI 面板 / 底部面板）、深色主题、全局快捷键，像写代码一样写小说。
 
 <!-- SEO: Vela is an open-source, privacy-first, local-first AI writing IDE purpose-built for novel writing, fiction writing, web novel creation, and long-form creative writing. It deeply integrates LLM-powered workflows with a local RAG knowledge base, giving authors an IDE-level creative experience — all running on your own machine with your own API keys (BYOK). -->
 
@@ -58,7 +69,7 @@ Vela is not just another chat-based text editor — it is a **production-grade n
 
 Vela 不是又一个带对话框的文本编辑器——它是一套深度融合了**大语言模型能力、长文本上下文检索 (RAG)、自动化创作管线**的专业级小说写作引擎。
 
-### 🧬 AI-Powered Novel Writing Pipeline / AI 小说创作全流程
+### 🧬 AI 小说创作全流程 / AI-Powered Novel Writing Pipeline
 
 | 能力 / Capability | 说明 / Description |
 |---|---|
@@ -90,18 +101,28 @@ Vela 不是又一个带对话框的文本编辑器——它是一套深度融合
 
 | 能力 / Capability | 说明 / Description |
 |---|---|
-| 🖥️ 可拖拽四分屏布局 (Resizable Panels) | 文件树 + 编辑器 + AI 面板 + 底部终端，像 VSCode/JetBrains 一样灵活组合 |
+| 🖥️ 可拖拽分屏布局 (Resizable Panels) | 文件树 + 编辑器 + AI 面板 + 底部面板，像 VSCode/JetBrains 一样灵活组合 |
 | 🌙 沉浸深色主题 (Dark Theme) | 极致优化的暗色模式，自定义悬浮标题栏与状态栏微交互 |
 | ⌨️ 快捷键体系 (Keyboard Shortcuts) | 全局快捷键：Cmd+N 新建、Cmd+O 打开、Cmd+=/- 缩放 |
-| 📦 跨平台 (Cross-Platform) | macOS (dmg) / Windows (nsis) / Linux (AppImage) |
+| 📦 跨平台 (Cross-Platform) | macOS (dmg) / Windows (nsis) 已提供预编译安装包；Linux (AppImage) 配置已就绪，可自行构建 |
 
 ---
 
 ## 🚀 安装与使用 / Installation
 
+### 系统要求 / Requirements
+
+| 项目 | 要求 |
+|---|---|
+| macOS | macOS 12 或更高（Apple 芯片与 Intel 芯片均支持） |
+| Windows | Windows 10 / 11 (x64) |
+| 内存 | 建议 8GB 以上（本地向量检索会占用一定内存） |
+| 磁盘 | 约 1GB 安装空间，另有小说工程与知识库占用 |
+| 网络 | 需要能访问你配置的模型服务商；使用 Ollama 等本地模型时可完全离线 |
+
 ### 方式一：直接下载 / Direct Download
 
-前往 [Releases](https://github.com/heider-x/vela/releases) 下载对应操作系统的最新版本：
+前往 [Releases](https://github.com/Kimcop-kc/vela/releases/latest) 下载对应操作系统的最新版本：
 
 | 平台 | 安装包 | 说明 |
 |---|---|---|
@@ -109,6 +130,8 @@ Vela 不是又一个带对话框的文本编辑器——它是一套深度融合
 | macOS（Intel） | `Vela-<版本>-macOS-x64-Installer.dmg` | Intel 芯片 Mac 使用 |
 | Windows x64 | `Vela-<版本>-Windows-x64-Setup.exe` | 安装版，可自选安装目录 |
 | Windows x64 | `Vela-<版本>-Windows-x64-Portable.exe` | 免安装版，双击即用 |
+
+> 不确定自己是哪种 Mac？点屏幕左上角苹果菜单 → 「关于本机」，看「芯片」一栏是 Apple M 系列还是 Intel。
 
 #### 🍎 macOS 安装说明（重要）
 
@@ -134,26 +157,30 @@ macOS 安装包**没有购买 Apple 开发者签名与公证**，首次打开时
 
 安装包同样没有购买代码签名。如果打开时出现蓝色的「Windows 已保护你的电脑」提示，点「**更多信息 → 仍要运行**」即可。
 
+- **Setup 版**：按向导安装，可自选安装目录，开始菜单里会有 Vela 图标。
+- **Portable 版**：免安装，双击 exe 直接运行，适合放在 U 盘里。
+
 ### 方式二：源码构建 / Build from Source
 
 ```bash
-# 环境要求：Node.js >= 18, pnpm >= 8
+# 环境要求：Node.js >= 20（推荐 LTS 版本）
 
 # 1. 克隆项目
-git clone https://github.com/heider-x/vela.git
+git clone https://github.com/Kimcop-kc/vela.git
 cd vela
 
-# 2. 安装依赖
-pnpm install
+# 2. 安装依赖（会为 Electron 重新编译 better-sqlite3 等原生模块，耐心等几分钟）
+npm install
 
-# 3. 启动开发服务器 (含热更新)
-pnpm dev
+# 3. 启动开发模式（热更新）
+npm run dev
 
-# 4. 打包分发
-pnpm build
+# 4. 打包当前平台的安装包，产物在 release/<版本号>/ 目录下
+npm run build
 ```
 
-> **Note**: 需要确保本地系统安装了构建 SQLite 的前置依赖（macOS: Xcode Command Line Tools, Windows: windows-build-tools）。
+> **Note**：需要系统具备编译原生模块的前置工具（macOS: Xcode Command Line Tools；Windows: Visual Studio Build Tools）。
+> 如果启动时报 `NODE_MODULE_VERSION` 相关错误，说明原生模块和 Electron 版本没对齐，执行 `npm run rebuild` 后重试。
 
 ---
 
@@ -202,12 +229,74 @@ Fluxion AI 面向个人开发者、技术团队与企业，通过统一 API 接�
 
 | 层级 / Layer | 技术 / Technology |
 |---|---|
-| **UI 框架** | React 18 + TypeScript + Zustand |
-| **样式** | Tailwind CSS + Radix UI + Lucide Icons |
-| **桌面端** | Electron + Vite |
-| **本地存储** | better-sqlite3 (关系型) + 轻量向量引擎 (RAG) |
+| **UI 框架** | React 19 + TypeScript 6 + Zustand |
+| **样式** | Tailwind CSS v4 + Radix UI + Lucide Icons |
+| **桌面端** | Electron 41 + Vite 8 |
+| **本地存储** | better-sqlite3 (关系型) + LanceDB (本地向量检索 RAG) |
 | **IPC 通信** | 强类型频道契约 (Type-safe IPC Channels) |
 | **AI 集成** | OpenAI-compatible + Gemini Protocol + MCP |
+| **构建分发** | electron-builder（GitHub Actions 自动构建 macOS / Windows 安装包） |
+
+---
+
+## ❓ 常见问题 / FAQ
+
+<details>
+<summary><b>macOS 提示「已损坏，无法打开」怎么办？</b></summary>
+<br>
+
+这是安装包没有 Apple 开发者签名导致的，不是文件真的坏了。先试 **右键点 Vela → 打开**；如果仍然被拦，打开「终端」执行：
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/Vela.app
+```
+
+详细步骤见上方 [macOS 安装说明](#-macos-安装说明重要)。
+
+</details>
+
+<details>
+<summary><b>我的稿子会被上传吗？</b></summary>
+<br>
+
+不会。Vela 本身没有服务器，小说工程、设定、知识库、对话记录都存在你自己的电脑上。只有当你主动点击生成、重写、审阅等按钮时，相关的那部分文本才会发送到**你自己配置的**模型服务商。如果你用 Ollama 等本地模型，整个过程可以完全不联网。
+
+</details>
+
+<details>
+<summary><b>需要花钱吗？</b></summary>
+<br>
+
+Vela 应用本身免费开源（GPL-3.0），不收取任何费用。唯一的开销是你自己调用的模型 API 费用——可以用 DeepSeek、智谱等性价比很高的模型，也可以完全用 Ollama 本地模型做到零成本。
+
+</details>
+
+<details>
+<summary><b>我的数据存在哪里？怎么备份？</b></summary>
+<br>
+
+- **小说工程**：保存在你创建/选择项目时指定的那个文件夹里，直接复制整个文件夹即可备份。
+- **应用配置、对话记录、日志**：保存在用户目录下的 `.vela` 文件夹（macOS: `~/.vela`，Windows: `C:\Users\<你的用户名>\.vela`）。
+
+升级版本不会清空这些数据，覆盖安装即可。
+
+</details>
+
+<details>
+<summary><b>怎么升级到新版本？</b></summary>
+<br>
+
+到 [Releases](https://github.com/Kimcop-kc/vela/releases/latest) 下载最新安装包，直接覆盖安装即可，稿子和配置都会保留。想看这次改了什么，可以点开对应 Release 页面的说明。
+
+</details>
+
+<details>
+<summary><b>支持哪些平台？有 Linux 版吗？</b></summary>
+<br>
+
+目前官方提供 **macOS（Apple 芯片 / Intel）** 与 **Windows x64** 的预编译安装包，由 GitHub Actions 自动构建。Linux 的 AppImage 打包配置已经写好，有需要可以按「源码构建」自行打包。
+
+</details>
 
 ---
 
@@ -220,7 +309,7 @@ Fluxion AI 面向个人开发者、技术团队与企业，通过统一 API 接�
 - 🌐 国际化 (i18n) 翻译
 - 📖 文档完善
 
-> 重大功能重构请先在 [Issues](https://github.com/heider-x/vela/issues) 中与作者探讨，以避免方向冲突。
+> 有想法或想做大改动，欢迎先到 [Issues](https://github.com/Kimcop-kc/vela/issues) 提出来讨论，避免方向冲突。
 
 ---
 
@@ -234,7 +323,11 @@ Fluxion AI 面向个人开发者、技术团队与企业，通过统一 API 接�
 
 <div align="center">
 
-**Crafted with 💡 by [heider-x]([https://github.com/heider](https://github.com/heider-x))**
+⭐ **如果 Vela 对你的写作有帮助，欢迎在右上角点个 Star —— 这是对开源项目最实在的支持。** ⭐
+
+[⬇️ 下载最新版](https://github.com/Kimcop-kc/vela/releases/latest) · [🐛 反馈问题](https://github.com/Kimcop-kc/vela/issues) · [💡 功能建议](https://github.com/Kimcop-kc/vela/issues)
+
+**由 [Kimcop-kc](https://github.com/Kimcop-kc) 维护 · 基于 Vela 开源项目二次开发**
 
 *Vela — Your AI-powered novel writing companion. Write smarter, not harder.*
 

@@ -7,11 +7,17 @@
 [![React](https://img.shields.io/badge/React-19-blue.svg)](https://reactjs.org/)
 [![Electron](https://img.shields.io/badge/Electron-41-black.svg)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6.svg)](https://www.typescriptlang.org/)
+[![Build](https://github.com/Kimcop-kc/vela/actions/workflows/build-windows.yml/badge.svg)](https://github.com/Kimcop-kc/vela/actions/workflows/build-windows.yml)
+[![Release](https://img.shields.io/github/v/release/Kimcop-kc/vela?color=blue&label=release)](https://github.com/Kimcop-kc/vela/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Kimcop-kc/vela/total?color=green&label=downloads)](https://github.com/Kimcop-kc/vela/releases)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](#installation)
+
+### ⬇️ [**Download the latest Vela**](https://github.com/Kimcop-kc/vela/releases/latest) — macOS (Apple Silicon / Intel) · Windows x64
 
 [Read in Chinese (中文)](README.md) | [Read in Russian (Русский)](README_RU.md)
 
-[Download](#installation) | [🌟 Recommended API: Fluxion AI](#fluxion-ai) | [Sponsor](#sponsor)
+[Installation](#installation) | [Key Features](#key-features) | [Model Configuration](#model-configuration) | [🌟 Recommended API: Fluxion AI](#fluxion-ai)
 
 </div>
 
@@ -96,7 +102,7 @@ Vela is not just another chat-based text editor — it is a **production-grade n
 
 ### Direct Download
 
-Go to [Releases](https://github.com/Izya12/vela/releases) to download the latest version for your OS:
+Go to [Releases](https://github.com/Kimcop-kc/vela/releases) to download the latest version for your OS:
 
 | Platform | Installer | Notes |
 |---|---|---|
@@ -132,10 +138,10 @@ The Windows builds are unsigned as well. If the blue "Windows protected your PC"
 ### Build from Source
 
 ```bash
-# Requirements: Node.js >= 18, npm >= 9
+# Requirements: Node.js >= 20 (LTS recommended)
 
 # 1. Clone the project
-git clone https://github.com/Izya12/vela.git
+git clone https://github.com/Kimcop-kc/vela.git
 cd vela
 
 # 2. Install dependencies
@@ -219,7 +225,7 @@ We welcome community contributions, including but not limited to:
 - Internationalization (i18n) translations
 - Documentation improvements
 
-> For major feature refactors, please discuss with the author first in [Issues](https://github.com/Izya12/vela/issues) to avoid direction conflicts.
+> For major feature refactors, please discuss with the author first in [Issues](https://github.com/Kimcop-kc/vela/issues) to avoid direction conflicts.
 
 ---
 

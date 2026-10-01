@@ -91,9 +91,13 @@ function splitOversizedUnit(unit: string, budget: number): string[] {
  * 把长文本按 token 预算切成多段，优先在空行（段落）处切分，其次在句末。
  * 返回结果拼起来等于原文（除非原文含超长无标点片段被硬切）。
  */
-export function splitTextByTokenBudget(text: string, maxTokensPerChunk: number): string[] {
+/**
+ * 按 token 预算切分文本（内部实现，不设预算下限，供递归缩段使用）。
+ * 对外请用 splitTextByTokenBudget，它对过小的预算有兜底。
+ */
+function splitByBudget(text: string, budgetTokens: number): string[] {
   if (!text || !text.trim()) return []
-  const budget = Math.max(200, Math.floor(maxTokensPerChunk))
+  const budget = Math.max(1, Math.floor(budgetTokens))
   if (estimateTokens(text) <= budget) return [text]
 
   const paragraphs = text.split(/(?:\r?\n){2,}/)
@@ -118,6 +122,11 @@ export function splitTextByTokenBudget(text: string, maxTokensPerChunk: number):
   return chunks.filter(chunk => chunk.trim() !== '')
 }
 
+/** 把长文本按 token 预算切成多段；预算过小时按 200 兜底，避免切出无意义的碎片 */
+export function splitTextByTokenBudget(text: string, maxTokensPerChunk: number): string[] {
+  return splitByBudget(text, Math.max(200, Math.floor(maxTokensPerChunk)))
+}
+
 /** 把数组按固定大小切成多组（如角色卡按条数分批） */
 export function chunkArray<T>(items: T[], size: number): T[][] {
   const chunkSize = Math.max(1, Math.floor(size))
@@ -126,6 +135,50 @@ export function chunkArray<T>(items: T[], size: number): T[][] {
     groups.push(items.slice(index, index + chunkSize))
   }
   return groups
+}
+
+/**
+ * 判断错误是否来自「模型输出被输出上限截断」。
+ *
+ * 供应商在 finish_reason=length 时会给出这类提示。它说明本段输入范围开得太大、
+ * 一次要输出的结果超过了模型输出上限，应当缩小范围重试，而不是原样重跑
+ * （原样重跑通常还会失败）。
+ */
+export function isOutputLengthError(error: unknown): boolean {
+  const message = typeof error === 'string'
+    ? error
+    : error instanceof Error
+      ? error.message
+      : String((error as { message?: unknown } | null)?.message ?? '')
+  return message.includes('达到长度上限') || /finish_reason["\s:=]*length/i.test(message)
+}
+
+/**
+ * 调用模型处理某一段文本；若失败原因是「输出达到长度上限」，把该段对半再切后递归重试。
+ *
+ * 这样即使模型的输出上限偏小，也能靠「缩小范围 → 逐段输出 → 合并」，把结果拿全，
+ * 而不是让整段（乃至整步）失败。depth 控制最多下切几层，避免无意义地反复切分。
+ */
+export async function callWithShrink<T>(
+  segment: string,
+  budget: number,
+  run: (segment: string) => Promise<T[]>,
+  depth = 3,
+): Promise<T[]> {
+  try {
+    return await run(segment)
+  } catch (error) {
+    if (depth <= 0 || !isOutputLengthError(error)) throw error
+    const halfBudget = Math.max(1, Math.floor(budget / 2))
+    const halves = splitByBudget(segment, halfBudget)
+    // 已经切不动了（例如整段只有一个句子）：保持原来的错误向上抛
+    if (halves.length <= 1) throw error
+    const merged: T[] = []
+    for (const half of halves) {
+      merged.push(...await callWithShrink(half, halfBudget, run, depth - 1))
+    }
+    return merged
+  }
 }
 
 /** 把条目数组按预算分组（每组的 token 总量不超过预算） */

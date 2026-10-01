@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCharacterFilterDirective,
   buildSegmentDirective,
+  callWithShrink,
   chunkArray,
   clampToTokenBudget,
   estimateTokens,
   extractJsonFragment,
   isFilledValue,
+  isOutputLengthError,
   mergeByKey,
   mergeChapterNotes,
   mergeFilled,
@@ -181,5 +183,38 @@ describe('分段指令', () => {
     expect(directive).toContain('2/3')
     expect(directive).toContain('只处理本段')
     expect(buildCharacterFilterDirective(['甲', '乙'])).toContain('甲、乙')
+  })
+})
+
+describe('输出被截断时的自动缩段重试', () => {
+  const LENGTH_ERROR = '模型输出达到长度上限，结果不完整，未提交本轮操作。请分段改写或增加模型输出上限。'
+
+  it('能识别供应商的截断错误', () => {
+    expect(isOutputLengthError(LENGTH_ERROR)).toBe(true)
+    expect(isOutputLengthError(new Error(LENGTH_ERROR))).toBe(true)
+    expect(isOutputLengthError('finish_reason=length')).toBe(true)
+    expect(isOutputLengthError(new Error('网络连接失败'))).toBe(false)
+  })
+
+  it('某段撞上输出上限时自动对半再切，并把各半结果合并回来', async () => {
+    const text = Array.from({ length: 16 }, (_, index) => `第${index + 1}段：${'甲'.repeat(40)}`).join('\n\n')
+    const attempts: string[] = []
+    const items = await callWithShrink(text, 200, async (segment) => {
+      attempts.push(segment)
+      if (estimateTokens(segment) > 100) throw new Error(LENGTH_ERROR)
+      return [segment.slice(0, 3)]
+    })
+    expect(attempts.length).toBeGreaterThan(1)
+    expect(items.length).toBeGreaterThan(1)
+    expect(items.every(item => item.length > 0)).toBe(true)
+  })
+
+  it('切不动时如实抛错，非截断错误不做无意义重试', async () => {
+    await expect(
+      callWithShrink('很短的一段内容。', 200, async () => { throw new Error(LENGTH_ERROR) }),
+    ).rejects.toThrow('达到长度上限')
+    await expect(
+      callWithShrink('内容', 200, async () => { throw new Error('网络连接失败') }),
+    ).rejects.toThrow('网络连接失败')
   })
 })

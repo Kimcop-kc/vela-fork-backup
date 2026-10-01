@@ -22,7 +22,7 @@
   ],
   "mac": {
     "target": ["dmg"],
-    "artifactName": "${productName}-Mac-${version}-Installer.${ext}",
+    "artifactName": "${productName}-Mac-${version}-${arch}-Installer.${ext}",
     "category": "public.app-category.productivity"
   },
   "win": {

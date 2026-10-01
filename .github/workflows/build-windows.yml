@@ -36,7 +36,6 @@ jobs:
     steps:
       - name: 检出本仓库代码
         uses: actions/checkout@v4
-        shell: pwsh
 
       - name: 显示将要构建的提交
         shell: pwsh

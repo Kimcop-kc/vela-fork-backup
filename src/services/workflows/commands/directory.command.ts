@@ -3,7 +3,7 @@ import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { DirectoryPromptBuilder } from '../../prompts/prompt-builder'
 import { DirectoryWorkflowParams, ChapterBlueprint, parseTextBlueprints, saveAllBlueprints } from '../directory-workflow'
-import { buildTruncatedContinueDirective, resolveGenerationBudgets } from '../segmented-generation'
+import { buildTruncatedContinueDirective, isOutputLengthError, resolveGenerationBudgets } from '../segmented-generation'
 import i18n from '../../../i18n'
 import { globalEventBus } from '../../../shared/event-bus'
 
@@ -117,20 +117,29 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
 
         // systemRole 由模板定义，不再硬编码
         const systemRole = getPromptTemplate('chapter_blueprint')?.systemRole || i18n.t('directory.systemRoleDefault', { ns: 'commands' })
-        const resultText = await this.callLLM(
-          prompt,
-          systemRole,
-          callbacks,
-          { responseFormat: { type: 'json_object' }, thinking: false, maxTokens: budgets.outputTokens },
-          context,
-        )
+        let resultText = ''
+        // 某批章节太多时，模型可能直接以「输出达到长度上限」失败。
+        // 这不是致命错误，按「本批太大」处理，交给下面的缩批逻辑换成更小的批次重试。
+        let lengthLimitError: Error | null = null
+        try {
+          resultText = await this.callLLM(
+            prompt,
+            systemRole,
+            callbacks,
+            { responseFormat: { type: 'json_object' }, thinking: false, maxTokens: budgets.outputTokens },
+            context,
+          )
+        } catch (error) {
+          if (!isOutputLengthError(error)) throw error
+          lengthLimitError = error instanceof Error ? error : new Error(String(error))
+        }
         assertCurrent()
 
         // ★ 关键修复：接受 AI 返回的从 cursor 到 endChapter 范围内的所有有效章节
         // AI 可能一次性返回超出本批次（batchEnd）的章节，全部保留，避免浪费和重复 LLM 请求
         const candidate = parseTextBlueprints(resultText, cursor, endChapter)
         if (!candidate.length) {
-          failure = new Error(i18n.t('directory.emptyResult', { ns: 'commands', from: cursor, to: batchEnd }))
+          failure = lengthLimitError ?? new Error(i18n.t('directory.emptyResult', { ns: 'commands', from: cursor, to: batchEnd }))
         } else if (candidate.some((bp, index) => bp.chapterNumber !== cursor + index)) {
           // 不允许跳号：缺章说明输出被截断，必须重试而不是把残缺批次当成功
           failure = new Error(i18n.t('directory.missingChapters', { ns: 'commands', from: cursor, to: batchEnd }))

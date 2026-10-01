@@ -17,10 +17,15 @@ import { useLLMStore } from '../../../stores/llm-store'
 import type { CharacterData } from '../../../../electron/repositories/character-repository'
 import {
   buildSegmentDirective,
+  callSegmentWithShrink,
   estimateTokens,
+  halveText,
+  isFilledValue,
+  isOutputLengthError,
   mergeByKey,
   mergeFilled,
   parseLooseJson,
+  resolveChunkBudget,
   resolveGenerationBudgets,
   splitTextByTokenBudget,
 } from '../segmented-generation'
@@ -239,18 +244,12 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     ]
     const sampleFields = allSampleFields.filter(field => field.text.trim() !== '')
 
-    const sampleGroups = groupSampleFields(sampleFields, budgets.inputTokens - 2000)
+    const sampleGroups = groupSampleFields(sampleFields, resolveChunkBudget(budgets, 2000))
     const effectiveGroups = sampleGroups.length > 0 ? sampleGroups : [[] as InferSampleField[]]
     const partials: InferPartial[] = []
 
-    for (let index = 0; index < effectiveGroups.length; index++) {
-      const group = effectiveGroups[index]
-      if (effectiveGroups.length > 1) {
-        callbacks.log(t('segmented.chunkLog', { index: index + 1, total: effectiveGroups.length }))
-      }
-      callbacks.log(t('importNovel.inferringConfig'))
-      callbacks.setProgress(25 + Math.round((index / effectiveGroups.length) * 40))
-
+    /** 单次推演：给定采样字段组，返回解析后的结果（解析失败返回 null） */
+    const runInferGroup = async (group: InferSampleField[], directive: string): Promise<InferPartial | null> => {
       const fieldText = (key: InferSampleField['key']) => group.find(field => field.key === key)?.text || ''
       const builder = new ImportPromptBuilder(template)
         .withSampledWorldview(fieldText('worldview'))
@@ -262,20 +261,62 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         .withTotalChapters(chapters.length)
         // 兼容旧版 Prompt 的 sample_content 变量
         .withSampleContent(group.map(field => `【${field.label}】\n${field.text}`).join('\n\n'))
-      let prompt = builder.build()
-      if (effectiveGroups.length > 1) {
-        prompt += buildSegmentDirective(index + 1, effectiveGroups.length, t('importNovel.configSegmentHint'))
-      }
-
       const rawResult = await this.callLLM(
-        prompt,
+        builder.build() + directive,
         template.systemRole || '你是一位顶级网文主编和资深阅读分析师。',
         callbacks,
         { responseFormat: { type: 'json_object' }, maxTokens: budgets.outputTokens }
       )
-      const parsed = parseLooseJson<InferPartial>(rawResult)
-      if (parsed) {
-        partials.push(parsed)
+      return parseLooseJson<InferPartial>(rawResult)
+    }
+
+    /**
+     * 推演一组采样片段；输出撞上模型上限时把这一组拆小后重试
+     * （先按字段拆半，只剩一个字段时再按正文长度拆半），避免整步失败。
+     */
+    const runInferGroupWithShrink = async (
+      group: InferSampleField[],
+      directive: string,
+      depth = 2,
+    ): Promise<InferPartial[]> => {
+      try {
+        const parsed = await runInferGroup(group, directive)
+        return parsed ? [parsed] : []
+      } catch (error) {
+        if (depth <= 0 || !isOutputLengthError(error)) throw error
+        if (group.length > 1) {
+          const half = Math.ceil(group.length / 2)
+          return [
+            ...await runInferGroupWithShrink(group.slice(0, half), directive, depth - 1),
+            ...await runInferGroupWithShrink(group.slice(half), directive, depth - 1),
+          ]
+        }
+        const only = group[0]
+        if (!only) throw error
+        const halves = halveText(only.text)
+        if (halves.length <= 1) throw error
+        const parts: InferPartial[] = []
+        for (const half of halves) {
+          parts.push(...await runInferGroupWithShrink([{ ...only, text: half }], directive, depth - 1))
+        }
+        return parts
+      }
+    }
+
+    for (let index = 0; index < effectiveGroups.length; index++) {
+      const group = effectiveGroups[index]
+      if (effectiveGroups.length > 1) {
+        callbacks.log(t('segmented.chunkLog', { index: index + 1, total: effectiveGroups.length }))
+      }
+      callbacks.log(t('importNovel.inferringConfig'))
+      callbacks.setProgress(25 + Math.round((index / effectiveGroups.length) * 40))
+
+      const directive = effectiveGroups.length > 1
+        ? buildSegmentDirective(index + 1, effectiveGroups.length, t('importNovel.configSegmentHint'))
+        : ''
+      const groupPartials = await runInferGroupWithShrink(group, directive)
+      if (groupPartials.length > 0) {
+        partials.push(...groupPartials)
       } else {
         callbacks.log(t('segmented.chunkFallbackLog', { index: index + 1, done: partials.length, error: t('importNovel.inferChunkUnparsable') }))
       }
@@ -417,7 +458,25 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
     }
 
     const budgets = currentGenerationBudgets()
-    const contentBudget = Math.max(2000, budgets.inputTokens - 2500)
+    const contentBudget = resolveChunkBudget(budgets, 2500)
+
+    /** 合并同一章多个分片推演出的蓝图：事件与悬念串起来，其余字段取首个非空值 */
+    const mergeBlueprints = (parts: Array<Record<string, unknown>>): Record<string, unknown> => {
+      const merged: Record<string, unknown> = {}
+      const keyEvents: string[] = []
+      const hooks: string[] = []
+      for (const part of parts) {
+        if (typeof part.keyEvents === 'string' && part.keyEvents.trim()) keyEvents.push(part.keyEvents.trim())
+        if (typeof part.suspenseHook === 'string' && part.suspenseHook.trim()) hooks.push(part.suspenseHook.trim())
+        for (const [key, value] of Object.entries(part)) {
+          if (key === 'keyEvents' || key === 'suspenseHook') continue
+          if (!isFilledValue(merged[key])) merged[key] = value
+        }
+      }
+      if (keyEvents.length > 0) merged.keyEvents = keyEvents.join(' / ')
+      if (hooks.length > 0) merged.suspenseHook = hooks.join(' / ')
+      return merged
+    }
 
     const tasks = chapters.map((ch) => async () => {
       try {
@@ -437,17 +496,21 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
           return this.parseJSON<Record<string, unknown>>(rawResult)
         }
 
-        // 单章正文超长时按 token 预算切段：先逐段提取本段事件，再合并成整章蓝图
+        // 单章正文超长时按 token 预算切段：先逐段提取本段事件，再合并成整章蓝图。
+        // 单段仍撞上输出上限时自动再切一半重试，避免整章推演失败。
         const contentChunks = splitTextByTokenBudget(ch.content, contentBudget)
         let blueprint: Record<string, unknown>
         if (contentChunks.length <= 1) {
-          blueprint = await runBlueprint(ch.content, '')
+          blueprint = await callSegmentWithShrink(ch.content, contentBudget, text => runBlueprint(text, ''), mergeBlueprints)
         } else {
           const segmentNotes: string[] = []
           for (let index = 0; index < contentChunks.length; index++) {
-            const partial = await runBlueprint(
+            const directive = buildSegmentDirective(index + 1, contentChunks.length, t('importNovel.blueprintSegmentHint'))
+            const partial = await callSegmentWithShrink(
               contentChunks[index],
-              buildSegmentDirective(index + 1, contentChunks.length, t('importNovel.blueprintSegmentHint')),
+              contentBudget,
+              text => runBlueprint(text, directive),
+              mergeBlueprints,
             )
             const events = [partial.keyEvents, partial.suspenseHook]
               .filter((value): value is string => typeof value === 'string' && value.trim() !== '')

@@ -41,6 +41,16 @@ export function resolveGenerationBudgets(modelMaxTokens?: number): GenerationBud
   return { outputTokens, inputTokens }
 }
 
+/**
+ * 切段预算：同时受「输入预算（扣掉 Prompt 固定开销）」与「输出上限」约束。
+ *
+ * 只按输入预算切段的话，本段要产出的结果（章节蓝图、角色卡、配置 JSON）规模依然会超过
+ * 模型输出上限，最终仍然落回「输出被截断」。所以这里取两者中的较小值。
+ */
+export function resolveChunkBudget(budgets: GenerationBudgets, inputReserve = 2000): number {
+  return Math.max(1000, Math.min(budgets.inputTokens - inputReserve, budgets.outputTokens))
+}
+
 /** 按 token 预算截断文本（超预算时在句子边界收尾，避免切断半句话） */
 export function clampToTokenBudget(text: string, maxTokens: number): string {
   if (!text) return ''
@@ -90,10 +100,8 @@ function splitOversizedUnit(unit: string, budget: number): string[] {
 /**
  * 把长文本按 token 预算切成多段，优先在空行（段落）处切分，其次在句末。
  * 返回结果拼起来等于原文（除非原文含超长无标点片段被硬切）。
- */
-/**
- * 按 token 预算切分文本（内部实现，不设预算下限，供递归缩段使用）。
- * 对外请用 splitTextByTokenBudget，它对过小的预算有兜底。
+ *
+ * 这是内部实现，不设预算下限；对外请用 splitTextByTokenBudget。
  */
 function splitByBudget(text: string, budgetTokens: number): string[] {
   if (!text || !text.trim()) return []
@@ -125,6 +133,17 @@ function splitByBudget(text: string, budgetTokens: number): string[] {
 /** 把长文本按 token 预算切成多段；预算过小时按 200 兜底，避免切出无意义的碎片 */
 export function splitTextByTokenBudget(text: string, maxTokensPerChunk: number): string[] {
   return splitByBudget(text, Math.max(200, Math.floor(maxTokensPerChunk)))
+}
+
+/**
+ * 按文本实际长度的一半切分，用于缩段重试时「强制再切一刀」。
+ *
+ * 与按预算切分不同，这里不设 200 的下限：即使整段只有一个长句子，也会继续按句末/字符切开。
+ * 只有确实无法再切（如只剩一个字符）时才返回单元素数组。
+ */
+export function halveText(text: string): string[] {
+  const half = Math.max(1, Math.floor(estimateTokens(text) / 2))
+  return splitByBudget(text, half)
 }
 
 /** 把数组按固定大小切成多组（如角色卡按条数分批） */
@@ -165,19 +184,38 @@ export async function callWithShrink<T>(
   run: (segment: string) => Promise<T[]>,
   depth = 3,
 ): Promise<T[]> {
+  return callSegmentWithShrink<T[]>(segment, budget, run, parts => parts.flat(), depth)
+}
+
+/**
+ * 逐段调用模型的通用缩段重试：run 处理一段并返回结果，merge 把多段结果合成一份。
+ *
+ * 与 callWithShrink 的区别是返回值不限定为数组，适用于「章节要点」这类分段后需要文本合并的场景。
+ * 命中输出上限时把该段再切一半后递归重试，这样即使模型的输出上限偏小，
+ * 也能靠「缩小范围 → 逐段输出 → 合并」把结果拿全，而不是让整步失败。
+ */
+export async function callSegmentWithShrink<T>(
+  segment: string,
+  budget: number,
+  run: (segment: string) => Promise<T>,
+  merge: (parts: T[]) => T,
+  depth = 3,
+): Promise<T> {
   try {
     return await run(segment)
   } catch (error) {
     if (depth <= 0 || !isOutputLengthError(error)) throw error
     const halfBudget = Math.max(1, Math.floor(budget / 2))
-    const halves = splitByBudget(segment, halfBudget)
-    // 已经切不动了（例如整段只有一个句子）：保持原来的错误向上抛
+    // 先按预算的一半切；段本身比预算小得多时，改按实际长度的一半强切
+    let halves = splitByBudget(segment, halfBudget)
+    if (halves.length <= 1) halves = halveText(segment)
+    // 确实切不动了（例如只剩一个字符）：保持原来的错误向上抛
     if (halves.length <= 1) throw error
-    const merged: T[] = []
+    const parts: T[] = []
     for (const half of halves) {
-      merged.push(...await callWithShrink(half, halfBudget, run, depth - 1))
+      parts.push(await callSegmentWithShrink(half, halfBudget, run, merge, depth - 1))
     }
-    return merged
+    return merge(parts)
   }
 }
 

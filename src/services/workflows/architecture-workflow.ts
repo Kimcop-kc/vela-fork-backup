@@ -12,6 +12,7 @@ import {
   buildSegmentDirective,
   callWithShrink,
   mergeByKey,
+  resolveChunkBudget,
   resolveGenerationBudgets,
   splitTextByTokenBudget,
 } from './segmented-generation'
@@ -264,7 +265,7 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         // 只按输入预算切的话，输出必然撞上模型输出上限（finish_reason=length）。
         const model = llmStore.models.find(m => m.id === llmStore.defaultModelId)
         const budgets = resolveGenerationBudgets(model?.maxTokens)
-        const chunkBudget = Math.max(1000, Math.min(budgets.inputTokens - 2000, budgets.outputTokens))
+        const chunkBudget = resolveChunkBudget(budgets)
         const chunks = splitTextByTokenBudget(characterDynamicsContent, chunkBudget)
         const safeChunks = chunks.length > 0 ? chunks : [characterDynamicsContent]
         const cardGroups: Array<Array<Record<string, unknown>>> = []

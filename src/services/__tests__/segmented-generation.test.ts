@@ -2,17 +2,20 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCharacterFilterDirective,
   buildSegmentDirective,
+  callSegmentWithShrink,
   callWithShrink,
   chunkArray,
   clampToTokenBudget,
   estimateTokens,
   extractJsonFragment,
+  halveText,
   isFilledValue,
   isOutputLengthError,
   mergeByKey,
   mergeChapterNotes,
   mergeFilled,
   parseLooseJson,
+  resolveChunkBudget,
   resolveGenerationBudgets,
   splitItemsByTokenBudget,
   splitTextByTokenBudget,
@@ -211,10 +214,66 @@ describe('输出被截断时的自动缩段重试', () => {
 
   it('切不动时如实抛错，非截断错误不做无意义重试', async () => {
     await expect(
-      callWithShrink('很短的一段内容。', 200, async () => { throw new Error(LENGTH_ERROR) }),
+      callWithShrink('一', 200, async () => { throw new Error(LENGTH_ERROR) }),
     ).rejects.toThrow('达到长度上限')
     await expect(
       callWithShrink('内容', 200, async () => { throw new Error('网络连接失败') }),
     ).rejects.toThrow('网络连接失败')
+  })
+
+  it('段比预算小得多时按实际长度强切，而不是直接放弃', async () => {
+    // 段本身只有 24 token，远小于预算 200；按预算的一半切不出两段，必须回退到按实际长度切
+    const text = '第一句话写在这里。第二句话也写在这里。第三句话同样写在这里。'
+    const attempts: string[] = []
+    const result = await callSegmentWithShrink(
+      text,
+      200,
+      async (segment) => {
+        attempts.push(segment)
+        if (attempts.length === 1) throw new Error(LENGTH_ERROR)
+        return segment
+      },
+      parts => parts.join(''),
+    )
+    expect(attempts.length).toBeGreaterThan(1)
+    expect(estimateTokens(result)).toBe(estimateTokens(text))
+  })
+
+  it('callSegmentWithShrink 支持任意返回值，由 merge 决定合并方式', async () => {
+    let firstAttempt = true
+    const merged = await callSegmentWithShrink(
+      '甲甲甲甲甲甲\n\n乙乙乙乙乙乙\n\n丙丙丙丙丙丙',
+      12,
+      async (segment) => {
+        // 首次整段调用撞上输出上限，缩段后每段都能正常返回
+        if (firstAttempt) {
+          firstAttempt = false
+          throw new Error(LENGTH_ERROR)
+        }
+        return segment.trim().slice(0, 1)
+      },
+      parts => parts.join('-'),
+    )
+    expect(merged).toBe('甲-乙-丙')
+  })
+})
+
+describe('切段预算与强制对半切分', () => {
+  it('resolveChunkBudget 同时受输入与输出上限约束', () => {
+    // 输出上限更小：按输出上限切
+    expect(resolveChunkBudget({ outputTokens: 2000, inputTokens: 48000 })).toBe(2000)
+    // 输入预算（扣掉预留）更小：按输入切
+    expect(resolveChunkBudget({ outputTokens: 30000, inputTokens: 8000 }, 2000)).toBe(6000)
+    // 两者都极小：兜底到 1000，避免切出无意义碎片
+    expect(resolveChunkBudget({ outputTokens: 512, inputTokens: 4000 }, 3800)).toBe(1000)
+  })
+
+  it('halveText 按实际长度对半切，且能切开单个长句', () => {
+    const single = '这是一句没有任何标点分隔符而且特别特别长的句子'.repeat(2)
+    const halves = halveText(single)
+    expect(halves.length).toBeGreaterThan(1)
+    expect(halves.join('')).toBe(single)
+    // 已经无法再切时返回单元素数组
+    expect(halveText('一')).toHaveLength(1)
   })
 })

@@ -10,9 +10,13 @@ import { ipc } from '../../ipc-client'
 import {
   buildCharacterFilterDirective,
   buildSegmentDirective,
+  callSegmentWithShrink,
   chunkArray,
+  halveText,
+  isOutputLengthError,
   mergeByKey,
   mergeChapterNotes,
+  resolveChunkBudget,
   resolveGenerationBudgets,
   splitTextByTokenBudget,
 } from '../segmented-generation'
@@ -135,23 +139,27 @@ export function buildFinalizePostProcessSteps(
       label: t('finalize.chapterNotes'),
       critical: true,
       executor: async (callbacks) => {
-        // 长章节按 token 预算切段逐段生成要点，再合并成一份，避免单次请求超出上下文导致要点缺失
+        // 长章节按 token 预算切段逐段生成要点，再合并成一份，避免单次请求超出上下文导致要点缺失。
+        // 切段同时受输入与输出预算约束；某段仍撞上输出上限时，自动再切一半重试。
         const budgets = currentGenerationBudgets()
-        const contentChunks = splitTextByTokenBudget(draftContent, budgets.inputTokens - 1500)
+        const chunkBudget = resolveChunkBudget(budgets, 1500)
+        const contentChunks = splitTextByTokenBudget(draftContent, chunkBudget)
         const notesParts: string[] = []
         for (let index = 0; index < contentChunks.length; index++) {
           if (contentChunks.length > 1) {
             callbacks.log(t('segmented.chunkLog', { index: index + 1, total: contentChunks.length }))
           }
-          const notesBuilder = new PostProcessPromptBuilder(notesTemplate)
-            .withChapterContent(contentChunks[index])
-            .withChapterNumber(chapterNumber)
-            .withChapterTitle(chapterTitle)
-          let prompt = notesBuilder.build()
-          if (contentChunks.length > 1) {
-            prompt += buildSegmentDirective(index + 1, contentChunks.length, t('finalize.notesSegmentHint'))
+          const directive = contentChunks.length > 1
+            ? buildSegmentDirective(index + 1, contentChunks.length, t('finalize.notesSegmentHint'))
+            : ''
+          const runSegment = async (text: string): Promise<string> => {
+            const notesBuilder = new PostProcessPromptBuilder(notesTemplate)
+              .withChapterContent(text)
+              .withChapterNumber(chapterNumber)
+              .withChapterTitle(chapterTitle)
+            return callLLMForPostProcess(notesBuilder.build() + directive, notesBuilder.getSystemRole(), callbacks)
           }
-          notesParts.push(await callLLMForPostProcess(prompt, notesBuilder.getSystemRole(), callbacks))
+          notesParts.push(await callSegmentWithShrink(contentChunks[index], chunkBudget, runSegment, mergeChapterNotes))
         }
         const cleanNotes = contentChunks.length > 1 ? mergeChapterNotes(notesParts) : (notesParts[0] ?? '')
         if (contentChunks.length > 1) {
@@ -280,7 +288,8 @@ export function buildFinalizePostProcessSteps(
         // 双向分段：正文按 token 预算切段 + 角色卡按条数分批，
         // 避免一次性输出全部角色状态被输出上限截断（旧实现还会硬截断正文前 5000 字）
         const budgets = currentGenerationBudgets()
-        const contentChunks = splitTextByTokenBudget(draftContent, budgets.inputTokens - 3000)
+        const chunkBudget = resolveChunkBudget(budgets, 3000)
+        const contentChunks = splitTextByTokenBudget(draftContent, chunkBudget)
         const cardsPerCall = Math.max(1, Math.min(12, Math.floor((budgets.outputTokens * 0.5) / 150)))
         const cardGroups = chunkArray(simpleCards, cardsPerCall)
         const chunkList = contentChunks.length > 0 ? contentChunks : ['']
@@ -291,25 +300,76 @@ export function buildFinalizePostProcessSteps(
         const collectedNewCharacters: Array<Record<string, unknown>> = []
         let callIndex = 0
 
+        /** 单次调用：给定角色卡组与正文片段，返回这一段的状态更新 */
+        const runCardCall = async (
+          cards: Array<{ name: unknown; role: unknown }>,
+          text: string,
+        ): Promise<{ updates: LLMCardUpdate[]; newCharacters: LLMNewCharacter[] }> => {
+          const cardBuilder = new PostProcessPromptBuilder(cardTemplate)
+            .withChapterContent(text)
+            .withChapterNumber(chapterNumber)
+            .withExistingCardsJson(cards)
+          let prompt = cardBuilder.build()
+          if (totalCalls > 1) {
+            prompt += buildSegmentDirective(callIndex, totalCalls, t('finalize.cardsSegmentHint'))
+            prompt += buildCharacterFilterDirective(cards.map(card => String(card.name)))
+          }
+          const cardsResult = await callLLMForPostProcess(prompt, cardBuilder.getSystemRole(), callbacks, { responseFormat: { type: 'json_object' } })
+          const parsedCards = parseJSON<LLMCardResult>(cardsResult)
+          return {
+            updates: Array.isArray(parsedCards.updates) ? parsedCards.updates : [],
+            newCharacters: Array.isArray(parsedCards.newCharacters) ? parsedCards.newCharacters : [],
+          }
+        }
+
+        /** 拼接同一段拆出的多个分片；最终仍会按角色名去重合并 */
+        const mergeCardParts = (
+          parts: Array<{ updates: LLMCardUpdate[]; newCharacters: LLMNewCharacter[] }>,
+        ): { updates: LLMCardUpdate[]; newCharacters: LLMNewCharacter[] } => ({
+          updates: parts.flatMap(part => part.updates),
+          newCharacters: parts.flatMap(part => part.newCharacters),
+        })
+
+        /**
+         * 输出撞上模型上限时逐层拆小：先拆角色卡组（输出规模主要由它决定），
+         * 只剩一张卡仍失败时再拆正文片段，直到每段都能完整输出。
+         */
+        const runCardCallWithShrink = async (
+          cards: Array<{ name: unknown; role: unknown }>,
+          text: string,
+          depth = 2,
+        ): Promise<{ updates: LLMCardUpdate[]; newCharacters: LLMNewCharacter[] }> => {
+          try {
+            return await runCardCall(cards, text)
+          } catch (error) {
+            if (depth <= 0 || !isOutputLengthError(error)) throw error
+            if (cards.length > 1) {
+              const half = Math.ceil(cards.length / 2)
+              return mergeCardParts([
+                await runCardCallWithShrink(cards.slice(0, half), text, depth - 1),
+                await runCardCallWithShrink(cards.slice(half), text, depth - 1),
+              ])
+            }
+            const halves = halveText(text)
+            if (halves.length <= 1) throw error
+            const parts: Array<{ updates: LLMCardUpdate[]; newCharacters: LLMNewCharacter[] }> = []
+            for (const half of halves) {
+              parts.push(await runCardCallWithShrink(cards, half, depth - 1))
+            }
+            return mergeCardParts(parts)
+          }
+        }
+
         for (const contentChunk of chunkList) {
           for (const cardGroup of groupList) {
             callIndex++
             if (totalCalls > 1) {
               callbacks.log(t('segmented.chunkLog', { index: callIndex, total: totalCalls }))
             }
-            const cardBuilder = new PostProcessPromptBuilder(cardTemplate)
-              .withChapterContent(contentChunk)
-              .withChapterNumber(chapterNumber)
-              .withExistingCardsJson(cardGroup)
-            let prompt = cardBuilder.build()
-            if (totalCalls > 1) {
-              prompt += buildSegmentDirective(callIndex, totalCalls, t('finalize.cardsSegmentHint'))
-              prompt += buildCharacterFilterDirective(cardGroup.map(card => String(card.name)))
-            }
-            const cardsResult = await callLLMForPostProcess(prompt, cardBuilder.getSystemRole(), callbacks, { responseFormat: { type: 'json_object' } })
-            const parsedCards = parseJSON<LLMCardResult>(cardsResult)
-            collectedUpdates.push(...(Array.isArray(parsedCards.updates) ? parsedCards.updates : []))
-            collectedNewCharacters.push(...(Array.isArray(parsedCards.newCharacters) ? parsedCards.newCharacters : []))
+            // 本段输出被上限截断时自动拆小重试，而不是让整个步骤失败
+            const piece = await runCardCallWithShrink(cardGroup, contentChunk)
+            collectedUpdates.push(...piece.updates)
+            collectedNewCharacters.push(...piece.newCharacters)
           }
         }
         if (totalCalls > 1) {

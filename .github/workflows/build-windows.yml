@@ -1,8 +1,14 @@
 name: Build Vela (Windows + macOS)
+
 on:
   push:
-    branches: [ master ]
+    branches: [ master, main ]
   workflow_dispatch:
+
+# 三个矩阵任务会并发写同一个 Release，加锁避免互相覆盖
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -21,85 +27,91 @@ jobs:
             files: |
               release/**/*.exe
               !release/**/win-unpacked/**
-          - os: macos-latest
+          - os: macos-13            # Intel 机器，直接编 x64，避免交叉编译原生依赖
             label: macOS x64 (Intel)
             artifact: Vela-macOS-x64
             build_args: "-- --mac --x64"
             files: |
               release/**/*.dmg
-          - os: macos-latest
+          - os: macos-14            # Apple Silicon 机器，编 arm64
             label: macOS arm64 (Apple Silicon)
             artifact: Vela-macOS-arm64
             build_args: "-- --mac --arm64"
             files: |
               release/**/*.dmg
+
     steps:
       - name: 检出本仓库代码
         uses: actions/checkout@v4
 
       - name: 显示将要构建的提交
-        shell: pwsh
+        shell: bash
         run: git log -1 --format="%H %s"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: 配置 npm 镜像源
-        shell: pwsh
-        run: npm config set registry https://registry.npmmirror.com
-
-      - name: 清理可能存在的锁文件
-        shell: pwsh
-        run: |
-          foreach ($f in @("pnpm-lock.yaml", "package-lock.json", "yarn.lock")) {
-            if (Test-Path $f) { Remove-Item -Path $f -Force }
-          }
-          if (Test-Path "node_modules") { Remove-Item -Path "node_modules" -Recurse -Force }
+          cache: npm
 
       - name: 使用 npm 安装依赖
-        shell: pwsh
+        shell: bash
         run: |
-          npm install --legacy-peer-deps
-          if ($LASTEXITCODE -ne 0) {
-            npm install --force --legacy-peer-deps
-          }
+          if [ -f package-lock.json ]; then
+            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          else
+            npm install --legacy-peer-deps
+          fi
 
       - name: 构建 ${{ matrix.label }}
-        shell: pwsh
+        shell: bash
         run: npm run build ${{ matrix.build_args }}
         env:
           GH_TOKEN: ${{ secrets.KK }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: 上传安装包到 Release
+        shell: bash
         continue-on-error: true
-        shell: pwsh
-        run: |
-          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $tag = "v$v"
-          $files = Get-ChildItem -Path release -Recurse -File | Where-Object {
-            $_.Extension -in ".exe", ".dmg" -and $_.FullName -notmatch 'win-unpacked'
-          }
-          if (-not $files) { Write-Host "未找到安装包，跳过上传"; exit 0 }
-          $exists = $true
-          try { gh release view $tag *> $null } catch { $exists = $false }
-          if (-not $exists) { Write-Host "Release $tag 不存在，跳过上传"; exit 0 }
-          foreach ($f in $files) {
-            Write-Host "上传 $($f.Name) -> $tag"
-            gh release upload $tag $f.FullName --clobber
-          }
         env:
           GH_TOKEN: ${{ secrets.KK }}
+        run: |
+          set -e
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+
+          # 注意：electron-builder 输出目录是 release/<version>/，必须递归查找
+          FILES=$(find release -type f \
+            \( -name '*.exe' -o -name '*.dmg' -o -name 'latest*.yml' \) \
+            ! -path '*win-unpacked*' | sort)
+
+          if [ -z "$FILES" ]; then
+            echo "未找到安装包，跳过上传"
+            exit 0
+          fi
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 不存在，正在创建…"
+            gh release create "$TAG" \
+              --title "Vela $TAG" \
+              --notes "Vela $TAG 自动构建（Windows x64 / macOS x64 / macOS arm64）"
+          fi
+
+          for f in $FILES; do
+            echo "上传 $f -> $TAG"
+            gh release upload "$TAG" "$f" --clobber
+          done
 
       - name: 上传构建结果
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.files }}
+          if-no-files-found: warn
           retention-days: 30
 
       - name: 显示构建结果
-        shell: pwsh
-        run: Get-ChildItem -Path release -Recurse -Include *.exe, *.dmg | Select-Object FullName, Length
+        shell: bash
+        run: |
+          echo "=== release 目录内容 ==="
+          find release -type f \( -name '*.exe' -o -name '*.dmg' -o -name 'latest*.yml' \) -exec ls -lh {} \; || true

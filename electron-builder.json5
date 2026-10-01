@@ -22,7 +22,7 @@
   ],
   "mac": {
     "target": ["dmg"],
-    "artifactName": "${productName}-Mac-${version}-${arch}-Installer.${ext}",
+    "artifactName": "${productName}-${version}-macOS-${arch}-Installer.${ext}",
     "category": "public.app-category.productivity"
   },
   "win": {
@@ -38,14 +38,14 @@
     ]
   },
   "nsis": {
-    "artifactName": "${productName}-${version}-setup.${ext}",
+    "artifactName": "${productName}-${version}-Windows-x64-Setup.${ext}",
     "oneClick": false,
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
     "deleteAppDataOnUninstall": false
   },
   "portable": {
-    "artifactName": "${productName}-${version}-portable.${ext}"
+    "artifactName": "${productName}-${version}-Windows-x64-Portable.${ext}"
   },
   "linux": {
     "target": ["AppImage"],

@@ -21,7 +21,8 @@
   "llm": {
     "noDefaultModel": "Модель по умолчанию не настроена",
     "modelNotFound": "Модель не найдена или не настроена, проверьте настройки модели",
-    "connectionFailed": "Ошибка подключения"
+    "connectionFailed": "Ошибка подключения",
+    "purposeDefault": "Без указания назначения"
   },
   "agentEngine": {
     "timeout": "Тайм-аут выполнения инструмента ({{seconds}}с)",

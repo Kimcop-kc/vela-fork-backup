@@ -1,7 +1,53 @@
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
+import { estimateTokens } from '../services/text-analysis'
 import type { ModelProfile, LLMResponse, TokenUsage } from '../shared/ipc-channels'
 import i18n from '../i18n'
+
+/** 调用用途：用于统计面板里区分「这次 token 花在哪」 */
+export type LLMCallPurpose = string
+
+interface CallRecordInput {
+  modelId: string
+  modelName: string
+  purpose: LLMCallPurpose
+  /** 请求侧的文本（消息拼接），用于在供应商未返回 usage 时估算 */
+  promptText: string
+  /** 响应侧的文本 */
+  completionText: string
+  usage?: TokenUsage
+  durationMs: number
+  success: boolean
+  errorMessage?: string
+}
+
+/** 供应商没有返回 usage 时，用文本长度粗略估算，避免统计面板永远为 0 */
+function estimateUsage(promptText: string, completionText: string): TokenUsage {
+  const promptTokens = estimateTokens(promptText)
+  const completionTokens = estimateTokens(completionText)
+  return { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens }
+}
+
+/** 把一次调用写入 llm_calls 表（统计面板的数据来源） */
+function recordCall(input: CallRecordInput): void {
+  if (!ipc.isElectron) return
+  const usage = input.usage && input.usage.totalTokens > 0
+    ? input.usage
+    : estimateUsage(input.promptText, input.completionText)
+  const payload = {
+    modelId: input.modelId,
+    modelName: input.modelName,
+    purpose: input.purpose,
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
+    totalTokens: usage.totalTokens,
+    durationMs: input.durationMs,
+    success: input.success,
+    errorMessage: input.errorMessage ?? '',
+  }
+  // 统计失败不应影响生成流程，这里只静默忽略
+  Promise.resolve(ipc.invoke('db:log-llm-call', payload)).catch(() => undefined)
+}
 
 /** 流式生成的回调 */
 interface StreamCallbacks {
@@ -39,14 +85,14 @@ interface LLMState {
   generate: (
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
     modelId?: string,
-    options?: { responseFormat?: { type: string }; thinking?: boolean }
+    options?: { responseFormat?: { type: string }; thinking?: boolean; maxTokens?: number; purpose?: LLMCallPurpose }
   ) => Promise<LLMResponse>
   /** 流式生成 */
   generateStream: (
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
     callbacks: StreamCallbacks,
     modelId?: string,
-    options?: { responseFormat?: { type: string }; thinking?: boolean }
+    options?: { responseFormat?: { type: string }; thinking?: boolean; maxTokens?: number; purpose?: LLMCallPurpose }
   ) => Promise<string>
   /** 取消生成 */
   cancelGeneration: (requestId: string) => Promise<void>
@@ -121,12 +167,28 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   generate: async (messages, modelId, options) => {
     const mid = modelId ?? get().defaultModelId
     if (!mid) return { success: false, content: '', error: i18n.t('llm.noDefaultModel', { ns: 'stores' }) }
-    return ipc.invoke('llm:generate', {
+    const startedAt = Date.now()
+    const result = await ipc.invoke('llm:generate', {
       modelId: mid,
       messages,
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
-      thinking: options?.thinking
+      thinking: options?.thinking,
+      maxTokens: options?.maxTokens
+    }) as LLMResponse
+
+    recordCall({
+      modelId: mid,
+      modelName: get().models.find(model => model.id === mid)?.name ?? mid,
+      purpose: options?.purpose ?? i18n.t('llm.purposeDefault', { ns: 'stores' }),
+      promptText: messages.map(message => message.content).join('\n'),
+      completionText: result?.content ?? '',
+      usage: result?.usage,
+      durationMs: Date.now() - startedAt,
+      success: result?.success !== false,
+      errorMessage: result?.error,
     })
+
+    return result
   },
 
   generateStream: async (messages, callbacks, modelId, options) => {
@@ -137,6 +199,10 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     }
 
     const requestId = crypto.randomUUID()
+    const startedAt = Date.now()
+    const promptText = messages.map(message => message.content).join('\n')
+    const modelName = get().models.find(model => model.id === mid)?.name ?? mid
+    const purpose = options?.purpose ?? i18n.t('llm.purposeDefault', { ns: 'stores' })
 
     // 注册流式事件监听
     const unsubChunk = ipc.on('llm:stream-chunk', (data) => {
@@ -147,6 +213,16 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
     const unsubDone = ipc.on('llm:stream-done', (data) => {
       if (data.requestId === requestId) {
+        recordCall({
+          modelId: mid,
+          modelName,
+          purpose,
+          promptText,
+          completionText: data.fullText ?? '',
+          usage: data.usage,
+          durationMs: Date.now() - startedAt,
+          success: true,
+        })
         callbacks.onDone?.(data.fullText, data.usage)
         cleanup()
       }
@@ -154,6 +230,16 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
     const unsubError = ipc.on('llm:stream-error', (data) => {
       if (data.requestId === requestId) {
+        recordCall({
+          modelId: mid,
+          modelName,
+          purpose,
+          promptText,
+          completionText: '',
+          durationMs: Date.now() - startedAt,
+          success: false,
+          errorMessage: data.error,
+        })
         callbacks.onError?.(data.error)
         cleanup()
       }
@@ -179,12 +265,23 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       messages,
       stream: true,
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
-      thinking: options?.thinking
+      thinking: options?.thinking,
+      maxTokens: options?.maxTokens
     })) as { requestId: string; started: boolean } | undefined
 
     // 模型未找到/未配置时主进程直接返回 started:false，不会发任何流事件；
     // 必须主动报错，否则调用方会永远等待 onDone/onError
     if (startRes && startRes.started === false) {
+      recordCall({
+        modelId: mid,
+        modelName,
+        purpose,
+        promptText,
+        completionText: '',
+        durationMs: Date.now() - startedAt,
+        success: false,
+        errorMessage: i18n.t('llm.modelNotFound', { ns: 'stores' }),
+      })
       callbacks.onError?.(i18n.t('llm.modelNotFound', { ns: 'stores' }))
       cleanup()
     }

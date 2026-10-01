@@ -15,28 +15,74 @@
     "reviewing": "Reviewing constraints and differences · {{count}} characters received",
     "formatRetry": "Regenerating a complete response after a format error (one retry per phase) · {{count}} characters received",
     "externalBlueprintChange": "New blueprints are available. Your unsaved edits were preserved; resolve them before reloading.",
-    "planFields": { "genre": "Genre", "premise": "Premise", "worldbuilding": "World setting", "charactersArch": "Character design", "synopsis": "Story plan", "writingStyle": "Writing style", "globalGuidance": "Book guidance" },
-    "title": "Story rehearsal", "subtitle": "Chapter {{chapter}} · Explore directions, then try a scene",
-    "intent": "Creative intent", "intentPlaceholder": "For example: The mentor truly betrays the protagonist, yet readers eventually understand the choice.",
-    "constraints": "Constraints to preserve", "constraintsPlaceholder": "For example: No easy forgiveness; the opponent has real leverage; reveal the motive later.",
-    "model": "Generation model", "noModel": "Add a generation model in Settings first", "generate": "Explore three directions", "regenerate": "Explore again",
+    "planFields": {
+      "genre": "Genre",
+      "premise": "Premise",
+      "worldbuilding": "World setting",
+      "charactersArch": "Character design",
+      "synopsis": "Story plan",
+      "writingStyle": "Writing style",
+      "globalGuidance": "Book guidance"
+    },
+    "title": "Story rehearsal",
+    "subtitle": "Chapter {{chapter}} · Explore directions, then try a scene",
+    "intent": "Creative intent",
+    "intentPlaceholder": "For example: The mentor truly betrays the protagonist, yet readers eventually understand the choice.",
+    "constraints": "Constraints to preserve",
+    "constraintsPlaceholder": "For example: No easy forgiveness; the opponent has real leverage; reveal the motive later.",
+    "model": "Generation model",
+    "noModel": "Add a generation model in Settings first",
+    "generate": "Explore three directions",
+    "regenerate": "Explore again",
     "contextHint": "Uses the blueprint, author plans and excerpts from the last three finalized chapters. Copy scenes before leaving this page.",
-    "generating": "Generating · {{count}} characters received", "cancel": "Cancel generation", "cancelled": "Generation cancelled. Existing results are preserved.",
-    "choices": "Story directions", "director": "Scene and information reveal", "directorDefault": "Use the protagonist's viewpoint. Show perceptible clues without directly explaining the hidden motive yet.",
-    "writeScene": "Try a short scene", "rewriteScene": "Try the scene again", "adopt": "Append to author guidance", "adoptHint": "Appends the selected direction and scene guidance, preserving the blueprint. Save it afterwards. Copy trial prose separately.",
-    "scene": "Trial scene · Editable", "sceneUsedDirector": "Guidance used for this scene: {{director}}", "copy": "Copy scene", "copied": "Scene copied.", "copyFailed": "Copy failed. Select and copy the text manually.",
-    "sources": "View the context used", "sourcesHint": "These are limited prose excerpts, not whole-book memory. Verify or add missing setup.",
-    "noHistory": "No finalized prose is available before this chapter.", "excerpt": "Chapter {{chapter}} · Finalized v{{version}}", "excerptTail": "Last 2,400 characters",
-    "authorPlan": "Author plans (not established events)", "truncated": "Long fields excerpted", "none": "No additional constraints",
-    "guidanceTitle": "[Selected story direction: {{title}}]", "proposalBoundary": "This is an author-selected future plan, not established prose. Required new setup must not be treated as past events.",
-    "adopted": "Appended to author guidance. Save the blueprint to keep it.", "saveFailed": "Blueprint save failed: {{message}}",
-    "fields": { "premise": "Causal approach", "motive": "Motivation and alternatives", "opposition": "Opposition and resistance", "cost": "Concrete cost", "aftermath": "Consequences", "setup": "Evidence and required setup", "risk": "Tradeoffs and uncertainty", "events": "Proposed events" },
+    "generating": "Generating · {{count}} characters received",
+    "cancel": "Cancel generation",
+    "cancelled": "Generation cancelled. Existing results are preserved.",
+    "choices": "Story directions",
+    "director": "Scene and information reveal",
+    "directorDefault": "Use the protagonist's viewpoint. Show perceptible clues without directly explaining the hidden motive yet.",
+    "writeScene": "Try a short scene",
+    "rewriteScene": "Try the scene again",
+    "adopt": "Append to author guidance",
+    "adoptHint": "Appends the selected direction and scene guidance, preserving the blueprint. Save it afterwards. Copy trial prose separately.",
+    "scene": "Trial scene · Editable",
+    "sceneUsedDirector": "Guidance used for this scene: {{director}}",
+    "copy": "Copy scene",
+    "copied": "Scene copied.",
+    "copyFailed": "Copy failed. Select and copy the text manually.",
+    "sources": "View the context used",
+    "sourcesHint": "These are limited prose excerpts, not whole-book memory. Verify or add missing setup.",
+    "noHistory": "No finalized prose is available before this chapter.",
+    "excerpt": "Chapter {{chapter}} · Finalized v{{version}}",
+    "excerptTail": "Last 2,400 characters",
+    "authorPlan": "Author plans (not established events)",
+    "truncated": "Long fields excerpted",
+    "none": "No additional constraints",
+    "guidanceTitle": "[Selected story direction: {{title}}]",
+    "proposalBoundary": "This is an author-selected future plan, not established prose. Required new setup must not be treated as past events.",
+    "adopted": "Appended to author guidance. Save the blueprint to keep it.",
+    "saveFailed": "Blueprint save failed: {{message}}",
+    "fields": {
+      "premise": "Causal approach",
+      "motive": "Motivation and alternatives",
+      "opposition": "Opposition and resistance",
+      "cost": "Concrete cost",
+      "aftermath": "Consequences",
+      "setup": "Evidence and required setup",
+      "risk": "Tradeoffs and uncertainty",
+      "events": "Proposed events"
+    },
     "errors": {
-      "NO_MODEL": "Configure and select an available generation model first.", "INVALID_INPUT": "Enter an intent. Intent and constraints must each stay within 3,000 characters.",
-      "INVALID_CHAPTER": "Invalid chapter number. Check the blueprint.", "INVALID_RESPONSE": "The model response is incomplete or has an invalid format. Retry or change models; previous results are preserved.",
-      "DUPLICATE_DIRECTIONS": "The model returned duplicate directions. Try again.", "PROJECT_CHANGED": "The project changed and this trial stopped. Reopen rehearsal in the intended project.",
-      "PROJECT_CLOSED": "The project database is closed. Reopen the project.", "BLUEPRINT_CHANGED": "The blueprint changed. Rehearse again before adopting to preserve newer edits.",
-      "GENERATION_TIMEOUT": "Generation timed out and the request was stopped. You can retry.", "generic": "Operation failed: {{message}}"
+      "NO_MODEL": "Configure and select an available generation model first.",
+      "INVALID_INPUT": "Enter an intent. Intent and constraints must each stay within 3,000 characters.",
+      "INVALID_CHAPTER": "Invalid chapter number. Check the blueprint.",
+      "INVALID_RESPONSE": "The model response is incomplete or has an invalid format. Retry or change models; previous results are preserved.",
+      "DUPLICATE_DIRECTIONS": "The model returned duplicate directions. Try again.",
+      "PROJECT_CHANGED": "The project changed and this trial stopped. Reopen rehearsal in the intended project.",
+      "PROJECT_CLOSED": "The project database is closed. Reopen the project.",
+      "BLUEPRINT_CHANGED": "The blueprint changed. Rehearse again before adopting to preserve newer edits.",
+      "GENERATION_TIMEOUT": "Generation timed out and the request was stopped. You can retry.",
+      "generic": "Operation failed: {{message}}"
     }
   },
   "archFile": {
@@ -201,7 +247,12 @@
       "characterDesc": "Ability/location/emotion consistency",
       "foreshadow": "Chapter Connection",
       "foreshadowDesc": "Foreshadowing, suspense continuity"
-    }
+    },
+    "qualitativeReview": "Qualitative Review",
+    "qualitativeReviewTooltip": "Records observations on character memory, prop continuity, foreshadowing, outline deviation, pacing and emotional arc, and marks revisable AI traces",
+    "qualitativeReviewDialogTitle": "Qualitative Review",
+    "qualitativeReviewDescription": "Records traceable creative observations and AI-trace marks only. It renders no pass/fail verdict and never rewrites the draft; pick items explicitly in the report when you want a revision.",
+    "qualitativeReviewStartFailed": "Failed to start the qualitative review: {{error}}"
   },
   "versionHistory": {
     "loading": "Loading...",
@@ -258,6 +309,30 @@
         "label": "Passed",
         "actionLabel": "No action needed"
       }
+    },
+    "qualitative": {
+      "title": "Qualitative Review",
+      "statsLine": "{{characters}} chars · {{paragraphs}} paragraphs · {{sentences}} sentences · dialogue ≈ {{dialogue}}%",
+      "contextLine": "Baseline: {{timeline}} timeline events · {{characters}} character states · {{plots}} open plot lines · {{facts}} known facts",
+      "contextUnavailable": "No established-facts baseline was available for this review",
+      "observationSection": "Review observations ({{count}})",
+      "noObservations": "No observations were recorded",
+      "originRule": "local rule check",
+      "evidenceLine": "line {{line}}",
+      "evidenceUnlocated": "not located automatically",
+      "suggestion": "Suggestion: ",
+      "aiTraceSection": "AI traces ({{count}} revisable spots)",
+      "noAiTraces": "No AI traces detected",
+      "metricLine": "Metric: {{label}} = {{value}} (threshold {{threshold}})",
+      "deai": "Remove AI tone",
+      "deaiDescription": "Rewrites the marked spots semantically. The method comes from the replaceable \"de-ai-tone\" skill; the result is a pending revision and never replaces the draft automatically.",
+      "noDraft": "No matching draft found; cannot start the revision.",
+      "deaiStartFailed": "Failed to start the de-AI-tone pass: {{error}}",
+      "reviseSelected": "Refine ({{count}} selected)",
+      "reviseStartFailed": "Failed to start refinement: {{error}}",
+      "selectAll": "Select all",
+      "selectNone": "Select none",
+      "notVerdict": "The above is traceable creative feedback, not a pass/fail verdict. Whether to revise is your call."
     }
   },
   "worldBuilding": {
@@ -377,6 +452,22 @@
       "saveFailed": "Save failed",
       "noAIModel": "Please configure AI model in Settings first",
       "generateFailed": "Generation failed"
+    },
+    "styleGuide": {
+      "button": "Compile style guide from reference",
+      "title": "Compile Style Guide",
+      "description": "Paste a reference text; the active \"style imitation\" skill distills it into an actionable style guide where every rule carries reference evidence.",
+      "referenceLabel": "Reference text",
+      "referencePlaceholder": "Paste the author text to imitate (at least 200 characters)",
+      "sourceLabel": "Source title",
+      "sourcePlaceholder": "e.g. Chapter 3 of \"Title\" by Author",
+      "applyLabel": "Write the result into this project’s style settings",
+      "applyHint": "When unchecked, the guide is only generated and your style settings stay untouched.",
+      "confirm": "Compile",
+      "cancel": "Cancel",
+      "tooShort": "The reference text needs at least 200 characters",
+      "startFailed": "Failed to start: {{error}}",
+      "skillNote": "The method lives in a skill: drop a SKILL.md with the same name into ~/.vela/skills/ to replace the default method."
     }
   },
   "threeWayMerge": {
@@ -500,5 +591,11 @@
       "byWord": "By Word",
       "close": "Close"
     }
+  },
+  "styleGuideView": {
+    "title": "Style Guide",
+    "hint": "Compiled by the \"style imitation\" skill; every rule points back to the reference text.",
+    "source": "Reference: {{title}}",
+    "noEvidence": "(no evidence-free rules in this guide)"
   }
 }

@@ -815,6 +815,27 @@ const rendered = renderPrompt(template, {
 | `generate_chapter_notes` | 章节要点生成 | 定稿后生成结构化要点 |
 | `update_character_cards` | 更新角色卡状态 | 以 JSON 更新角色卡 currentState |
 | `infer_novel_config` | 逆向推演配置 | 从已有内容反推配置（旧作续写） |
+| `infer_novel_config_with_vectors` | 逆向推演配置（带向量） | 结合知识库向量检索反推配置 |
+| `infer_single_chapter_blueprint` | 单章蓝图推演 | 反推单章蓝图结构 |
+| `extract_initial_characters` | 初始角色卡提取 | 从已有正文提取角色卡 |
+| `qualitative_review` | 定性审稿 | 六维度观察 + AI 痕迹标记（不判定、不改稿） |
+| `style_imitation` | 文风仿写 | 参考文本 → 有证据的可执行文风指南 |
+| `deai_revise` | 去 AI 味 | 按标记的可修订位置做语义改写（显式调用） |
+
+> **长输出任务注意**：章节蓝图、章节要点、角色卡更新、逆向推演（配置/单章蓝图）、角色卡提取等任务
+> 的输出很容易超出模型上下文上限。这类任务禁止"一次调用输出全部结果"，也不要对输入做 `slice()`
+> 硬截断；必须使用 `src/services/workflows/segmented-generation.ts` 的分段生成能力
+> （按 token 预算切分 → 逐段生成 → 按主键合并，输出残缺时缩小范围重试）。详见 `docs/SEGMENTED_GENERATION.md`。
+
+> **审稿与文风相关的三条边界（不得越过）**：
+> 1. 审稿只产出**可追溯的 observation** 与 **AI 痕迹标记**（`src/services/review/`）：
+>    不写通过/失败判定，也不自动改稿；需要修订时必须由用户或 Agent 显式选择条目后发起
+>    （`buildRevisionBrief` / `buildAiTraceBrief`）。UI 里也不得把审稿结果渲染成「通过/失败」。
+> 2. 去 AI 味的方法由**可替换的 Skill**（`~/.vela/skills/de-ai-tone`）提供，只在用户显式调用时执行；
+>    禁止用隐藏词表自动替换正文 —— `OVER_SUMMARY_CUES` / `ABSTRACT_NOUNS` 只用于**标记**，且公开可覆盖。
+> 3. 文风仿写由**被激活的 Skill** 把参考文本编译成文风指南，且**无证据不入指南**
+>    （模型规则与量化规则走同一条约束，缺证据的规则一律丢弃）。
+> 详见 `docs/QUALITATIVE_REVIEW.md`、`docs/STYLE_IMITATION.md`。
 
 ### 9.5 Prompt 设计原则
 

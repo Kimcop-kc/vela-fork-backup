@@ -35,7 +35,7 @@ export interface RevisionEntry {
   baseDraftId: number
   baseVersion: number         // 为了 UI 需要保留关联版本号
   revisionIndex: number
-  type: 'refine' | 'review-fix'
+  type: 'refine' | 'review-fix' | 'deai'
   status: 'pending' | 'merged' | 'discarded'
   createdAt: string
   mergedToDraftId?: number
@@ -75,7 +75,7 @@ function mapDraftMeta(dbMeta: DB_DraftMeta): DraftMeta {
 function mapRevisionEntry(dbMeta: DB_RevisionMeta, baseVersion: number): RevisionEntry {
   return {
     ...dbMeta,
-    type: dbMeta.revisionType as 'refine' | 'review-fix',
+    type: dbMeta.revisionType as 'refine' | 'review-fix' | 'deai',
     status: dbMeta.status as 'pending' | 'merged' | 'discarded',
     mergedToDraftId: dbMeta.mergedToDraftId ?? undefined,
     baseVersion,

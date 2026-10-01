@@ -8,6 +8,11 @@ export class OpenAIProvider implements ILLMProvider {
     if (model.provider !== 'ollama') return true
     return !/[:-]cloud$/i.test(model.modelName) && !/^https?:\/\/(?:api\.)?ollama\.com(?:\/|$)/i.test(model.baseUrl)
   }
+  private supportsStreamUsage(model: ModelProfile): boolean {
+    // Ollama 的 OpenAI 兼容端点对 stream_options 支持不稳定，直接不发送；
+    // 这种情况下调用量由渲染进程按文本长度估算（见 llm-store 的 recordCall）。
+    return model.provider !== 'ollama'
+  }
   private applyThinkingOption(body: Record<string, unknown>, model: ModelProfile, thinking?: boolean) {
     if (thinking === undefined) return
     if (model.provider === 'ollama') {
@@ -104,6 +109,11 @@ export class OpenAIProvider implements ILLMProvider {
         stream: true,
       }
 
+      // 让 OpenAI 兼容端点把 usage 放在流的最后一个 chunk 里，否则统计面板永远是空的
+      if (this.supportsStreamUsage(model)) {
+        body.stream_options = { include_usage: true }
+      }
+
       // 思考模式下 temperature/top_p 等参数不生效（DeepSeek 会静默忽略），仅在非思考模式下传递
       this.applyThinkingOption(body, model, opts.thinking)
       // Some JSON gateways reject custom temperature; thinking mode also owns its sampling settings.
@@ -139,12 +149,22 @@ export class OpenAIProvider implements ILLMProvider {
       let fullText = ''
       let isThinking = false
       let truncated = false
+      let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined
 
       const handleData = (json: string) => {
         if (json === '[DONE]') return
         try {
           const parsed = JSON.parse(json) as {
             choices: Array<{ finish_reason?: string; delta?: { content?: string, reasoning_content?: string } }>
+            usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+          }
+          // include_usage 生效时，最后一个 chunk 只带 usage、没有 choices
+          if (parsed.usage) {
+            usage = {
+              promptTokens: parsed.usage.prompt_tokens ?? 0,
+              completionTokens: parsed.usage.completion_tokens ?? 0,
+              totalTokens: parsed.usage.total_tokens ?? 0,
+            }
           }
           if (parsed.choices?.[0]?.finish_reason === 'length') truncated = true
           const delta = parsed.choices?.[0]?.delta
@@ -216,7 +236,13 @@ export class OpenAIProvider implements ILLMProvider {
         opts.onError('模型输出达到长度上限，结果不完整，未提交本轮操作。请分段改写或增加模型输出上限。')
         return
       }
-      opts.onDone(fullText.replace(/^[\s\S]*<\/think>/i, '').replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim())
+      const cleanedText = fullText.replace(/^[\s\S]*<\/think>/i, '').replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
+      // 只有拿到真实 usage 时才多传一个参数：没有数据时保持原有调用签名
+      if (usage && usage.totalTokens > 0) {
+        opts.onDone(cleanedText, usage)
+      } else {
+        opts.onDone(cleanedText)
+      }
     } catch (error) {
       if ((error as Error).name === 'AbortError') {
         opts.onError('已取消生成')

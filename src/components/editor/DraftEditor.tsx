@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench } from 'lucide-react'
+import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, ClipboardCheck, Wrench } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { useProjectStore } from '../../stores/project-store'
@@ -98,7 +98,7 @@ export default function DraftEditor({ filePath, content }: Props) {
   const isChapterBusy = !!activeChapterRun
 
   const [saving, setSaving] = useState(false)
-  const [confirmAction, setConfirmAction] = useState<'refine' | 'review' | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'refine' | 'review' | 'qualitative' | null>(null)
   const [userRefinePrompt, setUserRefinePrompt] = useState('')
   // 审稿维度多选
   const REVIEW_DIMS = [
@@ -178,6 +178,27 @@ export default function DraftEditor({ filePath, content }: Props) {
       }), false)
     } catch (e) {
       toast.error(t('draftEditor.reviewStartFailed', { error: e }))
+    }
+  }
+
+  /** 执行定性审稿（产出可追溯的观察与 AI 痕迹标记，不做通过/失败判定） */
+  const doQualitativeReview = async () => {
+    if (!currentProject || !meta) return
+    try {
+      const { useWorkflowStore } = await import('../../stores/workflow-store')
+      const { createQualitativeReviewWorkflow } = await import('../../services/workflows/chapter-workflow')
+
+      const body = await readDraftBody(filePath)
+
+      useWorkflowStore.getState().startWorkflow(createQualitativeReviewWorkflow({
+        chapterNumber: meta.chapterNumber,
+        chapterTitle: meta.chapterTitle ?? t('draftEditor.unknownTitle'),
+        draftPath: filePath,
+        draftContent: body,
+        reviewFocus: REVIEW_DIMS.filter(d => reviewDims[d.key]).map(d => d.label).join('、') || undefined,
+      }), false)
+    } catch (e) {
+      toast.error(t('draftEditor.qualitativeReviewStartFailed', { error: e }))
     }
   }
 
@@ -418,6 +439,18 @@ export default function DraftEditor({ filePath, content }: Props) {
               {t('draftEditor.aiReview')}
             </Button>
 
+            {/* 定性审稿 */}
+            <Button
+              variant="ai"
+              size="sm"
+              onClick={() => setConfirmAction('qualitative')}
+              disabled={isChapterBusy}
+              title={t('draftEditor.qualitativeReviewTooltip')}
+            >
+              <ClipboardCheck size={12} />
+              {t('draftEditor.qualitativeReview')}
+            </Button>
+
             {/* 定稿 */}
             <Button
               variant="success"
@@ -498,7 +531,11 @@ export default function DraftEditor({ filePath, content }: Props) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles size={15} className="text-[var(--color-accent)]" />
-              {confirmAction === 'refine' ? t('draftEditor.refineDialogTitle') : t('draftEditor.reviewDialogTitle')}
+              {confirmAction === 'refine'
+                ? t('draftEditor.refineDialogTitle')
+                : confirmAction === 'qualitative'
+                  ? t('draftEditor.qualitativeReviewDialogTitle')
+                  : t('draftEditor.reviewDialogTitle')}
             </DialogTitle>
             <DialogDescription>
               {t('draftEditor.dialogTarget', { title: meta?.chapterTitle ?? t('draftEditor.draft'), version: meta?.version ?? '' })}
@@ -513,7 +550,11 @@ export default function DraftEditor({ filePath, content }: Props) {
               </>
             ) : (
               <>
-                <div>{t('draftEditor.reviewDescription')}</div>
+                <div>
+                  {confirmAction === 'qualitative'
+                    ? t('draftEditor.qualitativeReviewDescription')
+                    : t('draftEditor.reviewDescription')}
+                </div>
                 <div className="mt-3">
                   <div className="text-xs font-medium mb-2" style={{ color: 'var(--color-text)' }}>{t('draftEditor.reviewFocusTitle')}</div>
                   <div className="flex flex-wrap gap-2">
@@ -580,6 +621,7 @@ export default function DraftEditor({ filePath, content }: Props) {
                 setConfirmAction(null)
                 if (act === 'refine') doRefine()
                 else if (act === 'review') doReview()
+                else if (act === 'qualitative') doQualitativeReview()
               }}
             >
               {t('draftEditor.confirmExecution')}

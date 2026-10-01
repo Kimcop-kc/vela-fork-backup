@@ -8,6 +8,12 @@ import type { CharacterData } from '../../../electron/repositories/character-rep
 import i18n from '../../i18n'
 
 import { runPostProcessPipeline, type PostProcessStep, stripThinkingTags } from './workflow-utils'
+import {
+  buildSegmentDirective,
+  mergeByKey,
+  resolveGenerationBudgets,
+  splitTextByTokenBudget,
+} from './segmented-generation'
 
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'commands', ...opts })
 
@@ -167,6 +173,76 @@ export function getNarrativePOVLabel(pov: string): string {
 
 export const ARCH_CHARACTER_SCOPE = 'arch_characters'
 
+/**
+ * 容错解析角色卡 JSON：兼容全角标点、尾逗号、单引号、未加引号键，以及数组/对象等不同包裹格式。
+ * 解析失败时抛出 workflowDefs.charExtractError，由调用方决定是否降级。
+ */
+function parseCharacterCards(raw: string): Array<Record<string, unknown>> {
+  const cleanedCards = stripThinkingTags(raw)
+  const jsonStr = cleanedCards.replace(/```json?\n?/g, '').replace(/```/g, '').trim()
+  // 容错解析：AI 输出常含全角标点（：，、“”）、尾逗号、单引号或未加引号的键
+  const normalized = jsonStr
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/：/g, ':')
+    .replace(/，/g, ',')
+    .replace(/,(\s*[}\]])/g, '$1')
+
+  const sliceJson = (s: string, open: string, close: string): string | null => {
+    const start = s.indexOf(open)
+    const end = s.lastIndexOf(close)
+    return start >= 0 && end > start ? s.substring(start, end + 1) : null
+  }
+
+  // 依次尝试多种候选：数组区间、对象区间、原文、单引号修正、未加引号键修正
+  const candidates = [
+    sliceJson(normalized, '[', ']'),
+    sliceJson(normalized, '{', '}'),
+    normalized,
+    normalized.replace(/'/g, '"'),
+    normalized.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '$1"$2":')
+  ]
+
+  let parsedData: unknown = null
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    try {
+      parsedData = JSON.parse(candidate)
+      break
+    } catch {
+      // 尝试下一个候选
+    }
+  }
+
+  if (parsedData === null) {
+    throw new Error(t('workflowDefs.charExtractError', { preview: normalized.slice(0, 500) }))
+  }
+
+  // 兼容多种格式：直接数组、{ characters: [...] }、或其他包含数组的对象
+  let parsedCards: Array<Record<string, unknown>> = []
+  if (Array.isArray(parsedData)) {
+    // 直接返回数组 [...]
+    parsedCards = parsedData as Array<Record<string, unknown>>
+  } else if (parsedData && typeof parsedData === 'object') {
+    const obj = parsedData as Record<string, unknown>
+    // 优先查找 characters 字段
+    if (Array.isArray(obj.characters)) {
+      parsedCards = obj.characters as Array<Record<string, unknown>>
+    } else {
+      // 回退：查找对象中第一个包含对象的数组字段
+      for (const value of Object.values(obj)) {
+        if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+          parsedCards = value as Array<Record<string, unknown>>
+          break
+        }
+      }
+    }
+  }
+
+  return parsedCards
+}
+
+
 export function createCharacterExtractSteps(_projectPath: string, characterDynamicsContent: string, genre: string): PostProcessStep[] {
   return [
     {
@@ -177,95 +253,55 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         const { ArchitecturePromptBuilder } = await import('../prompts/prompt-builder')
         const template = getPromptTemplate('extract_initial_characters')
         if (!template) throw new Error(t('common.templateNotFound', { key: 'extract_initial_characters' }))
-        const extractPrompt = new ArchitecturePromptBuilder(template).withCharacterDynamics(characterDynamicsContent).withGenre(genre).build()
         const systemRole = template.systemRole || t('workflowDefs.charExtractSystemRole')
 
         const llmStore = useLLMStore.getState()
         cb.appendText(t('workflowDefs.charExtractingCards') + '\n')
 
-        let fullContent = ''
-        await new Promise<void>((resolve, reject) => {
-          llmStore.generateStream(
-            [
-              { role: 'system', content: systemRole },
-              { role: 'user', content: extractPrompt }
-            ],
-            {
-              onChunk: (chunk) => { fullContent += chunk; cb.appendText(chunk) },
-              onDone: () => resolve(),
-              onError: (err) => reject(new Error(err))
-            },
-            undefined,
-            { responseFormat: { type: 'json_object' } }
-          )
-        })
+        // 角色图谱过长时按 token 预算切段提取，再按角色名合并，避免单次输出被截断
+        const model = llmStore.models.find(m => m.id === llmStore.defaultModelId)
+        const budgets = resolveGenerationBudgets(model?.maxTokens)
+        const chunks = splitTextByTokenBudget(characterDynamicsContent, budgets.inputTokens - 2000)
+        const safeChunks = chunks.length > 0 ? chunks : [characterDynamicsContent]
+        const cardGroups: Array<Array<Record<string, unknown>>> = []
 
-        const cleanedCards = stripThinkingTags(fullContent)
-        const jsonStr = cleanedCards.replace(/```json?\n?/g, '').replace(/```/g, '').trim()
-        // 容错解析：AI 输出常含全角标点（：，、“”）、尾逗号、单引号或未加引号的键
-        const normalized = jsonStr
-          .replace(/[“”]/g, '"')
-          .replace(/[‘’]/g, "'")
-          .replace(/：/g, ':')
-          .replace(/，/g, ',')
-          .replace(/,(\s*[}\]])/g, '$1')
-
-        const sliceJson = (s: string, open: string, close: string): string | null => {
-          const start = s.indexOf(open)
-          const end = s.lastIndexOf(close)
-          return start >= 0 && end > start ? s.substring(start, end + 1) : null
-        }
-
-        // 依次尝试多种候选：数组区间、对象区间、原文、单引号修正、未加引号键修正
-        const candidates = [
-          sliceJson(normalized, '[', ']'),
-          sliceJson(normalized, '{', '}'),
-          normalized,
-          normalized.replace(/'/g, '"'),
-          normalized.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '$1"$2":')
-        ]
-
-        let parsedData: unknown = null
-        for (const candidate of candidates) {
-          if (!candidate) continue
+        for (let index = 0; index < safeChunks.length; index++) {
+          if (safeChunks.length > 1) cb.log(t('segmented.chunkLog', { index: index + 1, total: safeChunks.length }))
+          const directive = safeChunks.length > 1
+            ? buildSegmentDirective(index + 1, safeChunks.length, t('workflowDefs.charExtractSegmentHint'))
+            : ''
+          const extractPrompt = new ArchitecturePromptBuilder(template)
+            .withCharacterDynamics(safeChunks[index])
+            .withGenre(genre)
+            .build() + directive
+          let fullContent = ''
+          await new Promise<void>((resolve, reject) => {
+            llmStore.generateStream(
+              [
+                { role: 'system', content: systemRole },
+                { role: 'user', content: extractPrompt }
+              ],
+              {
+                onChunk: (chunk) => { fullContent += chunk; cb.appendText(chunk) },
+                onDone: () => resolve(),
+                onError: (err) => reject(new Error(err))
+              },
+              undefined,
+              { responseFormat: { type: 'json_object' }, maxTokens: budgets.outputTokens }
+            )
+          })
           try {
-            parsedData = JSON.parse(candidate)
-            break
-          } catch {
-            // 尝试下一个候选
+            cardGroups.push(parseCharacterCards(fullContent))
+          } catch (error) {
+            // 单段失败不放弃整体：保留已成功的分段结果，全部失败时才会抛出
+            if (cardGroups.length === 0) throw error
+            cb.log(t('segmented.chunkFallbackLog', { index: index + 1, done: cardGroups.length, error: String(error) }))
           }
         }
 
-        if (parsedData === null) {
-          throw new Error(t('workflowDefs.charExtractError', { preview: normalized.slice(0, 500) }))
-        }
-
-        // 兼容多种格式：直接数组、{ characters: [...] }、或其他包含数组的对象
-        let parsedCards: Array<Record<string, unknown>> = []
-        if (Array.isArray(parsedData)) {
-          // 直接返回数组 [...]
-          parsedCards = parsedData as Array<Record<string, unknown>>
-        } else if (parsedData && typeof parsedData === 'object') {
-          const obj = parsedData as Record<string, unknown>
-          // 优先查找 characters 字段
-          if (Array.isArray(obj.characters)) {
-            parsedCards = obj.characters as Array<Record<string, unknown>>
-          } else {
-            // 回退：查找对象中第一个包含对象的数组字段
-            for (const value of Object.values(obj)) {
-              if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
-                parsedCards = value as Array<Record<string, unknown>>
-                break
-              }
-            }
-          }
-        }
-
-        if (parsedCards.length === 0) {
-          // 输出原始内容前 500 字符用于调试
-          const preview = normalized.slice(0, 500)
-          throw new Error(t('workflowDefs.charExtractError', { preview }))
-        }
+        const parsedCards = mergeByKey(cardGroups, { keyOf: (card) => String(card.name ?? ''), prefer: 'first' })
+        if (parsedCards.length === 0) throw new Error(t('workflowDefs.charExtractError', { preview: '' }))
+        if (safeChunks.length > 1) cb.log(t('segmented.chunkDoneLog', { total: safeChunks.length }))
 
         // 构建角色卡数据列表
         const validRoles = ['protagonist', 'antagonist', 'supporting', 'minor']
@@ -343,4 +379,3 @@ export async function repairArchCharacterCards(projectPath: string): Promise<voi
     ],
   })
 }
-

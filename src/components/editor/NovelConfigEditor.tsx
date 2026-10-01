@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Save, Sparkles, Info, Loader2 } from 'lucide-react'
+import { Save, Sparkles, Info, Loader2, ScrollText } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
@@ -11,6 +11,9 @@ import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { NativeSelect } from '../ui/NativeSelect'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
+import {
+  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
+} from '../ui/Dialog'
 
 /** Genre options with i18n labels (values kept in Chinese for backward compatibility) */
 const GENRE_OPTIONS = [
@@ -48,6 +51,12 @@ export default function NovelConfigEditor() {
   const addLog = useWorkflowStore.getState().addLog
   const [saving, setSaving] = useState(false)
   const [showGenerateConfig, setShowGenerateConfig] = useState(false)
+  // 文风指南编译弹框状态
+  const [showStyleGuide, setShowStyleGuide] = useState(false)
+  const [referenceText, setReferenceText] = useState('')
+  const [sourceTitle, setSourceTitle] = useState('')
+  const [applyGuide, setApplyGuide] = useState(true)
+  const [compiling, setCompiling] = useState(false)
 
   // 各区块的独立生成状态
   const [generatingField, setGeneratingField] = useState<GeneratableField | null>(null)
@@ -88,6 +97,39 @@ export default function NovelConfigEditor() {
       return
     }
     setShowGenerateConfig(true)
+  }
+
+  /**
+   * 从参考文本编译文风指南。
+   *
+   * 归纳方法由「被激活的仿写 Skill」提供；是否写入项目文风设定，
+   * 由弹框里的勾选项显式决定，不会在后台悄悄覆盖文风。
+   */
+  const handleCompileStyleGuide = async () => {
+    if (compiling) return
+    if (!defaultModelId) {
+      addLog('error', `⚠️ ${t('novelConfig.messages.noAIModel')}`)
+      return
+    }
+    const reference = referenceText.trim()
+    if (reference.length < 200) {
+      addLog('error', `⚠️ ${t('novelConfig.styleGuide.tooShort')}`)
+      return
+    }
+    setCompiling(true)
+    try {
+      const { createCompileStyleGuideWorkflow } = await import('../../services/workflows/chapter-workflow')
+      useWorkflowStore.getState().startWorkflow(createCompileStyleGuideWorkflow({
+        referenceText: reference,
+        sourceTitle: sourceTitle.trim() || t('novelConfig.writingStyle'),
+        applyToProject: applyGuide,
+      }), false)
+      setShowStyleGuide(false)
+    } catch (e) {
+      addLog('error', `⚠️ ${t('novelConfig.styleGuide.startFailed', { error: e })}`)
+    } finally {
+      setCompiling(false)
+    }
   }
 
   /** 单字段 AI 生成 */
@@ -305,6 +347,12 @@ export default function NovelConfigEditor() {
               placeholder={t('novelConfig.writingStylePlaceholder')}
               rows={6}
             />
+            <div className="mt-2">
+              <Button variant="outline" size="sm" onClick={() => setShowStyleGuide(true)}>
+                <ScrollText size={11} />
+                {t('novelConfig.styleGuide.button')}
+              </Button>
+            </div>
           </Section>
 
           {/* 参考作品 */}
@@ -323,6 +371,68 @@ export default function NovelConfigEditor() {
           updateNovelConfig(parsed)
         }}
       />
+
+      {/* 文风指南编译弹框：参考文本 → 有证据的可执行文风指南 */}
+      <Dialog open={showStyleGuide} onOpenChange={(v) => !v && setShowStyleGuide(false)}>
+        <DialogContent className="max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ScrollText size={15} className="text-[var(--color-accent)]" />
+              {t('novelConfig.styleGuide.title')}
+            </DialogTitle>
+            <DialogDescription>{t('novelConfig.styleGuide.description')}</DialogDescription>
+          </DialogHeader>
+          <div className="px-5 py-2 space-y-3">
+            <div>
+              <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                {t('novelConfig.styleGuide.referenceLabel')}
+              </label>
+              <Textarea
+                value={referenceText}
+                onChange={(e) => setReferenceText(e.target.value)}
+                placeholder={t('novelConfig.styleGuide.referencePlaceholder')}
+                rows={8}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                {t('novelConfig.styleGuide.sourceLabel')}
+              </label>
+              <Input
+                value={sourceTitle}
+                onChange={(e) => setSourceTitle(e.target.value)}
+                placeholder={t('novelConfig.styleGuide.sourcePlaceholder')}
+              />
+            </div>
+            <label className="flex items-start gap-2 cursor-pointer select-none text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={applyGuide}
+                onChange={(e) => setApplyGuide(e.target.checked)}
+              />
+              <span>
+                {t('novelConfig.styleGuide.applyLabel')}
+                <span className="block mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                  {t('novelConfig.styleGuide.applyHint')}
+                </span>
+              </span>
+            </label>
+            <p className="text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+              {t('novelConfig.styleGuide.skillNote')}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowStyleGuide(false)}>
+              {t('novelConfig.styleGuide.cancel')}
+            </Button>
+            <Button variant="ai" onClick={handleCompileStyleGuide} disabled={compiling}>
+              {compiling ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {t('novelConfig.styleGuide.confirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Trash2, ChevronsDown, Loader2, CheckCircle2, XCircle, Clock,
-  Play, X, ChevronDown, ChevronRight, Zap,
+  Play, X, ChevronDown, ChevronRight, Zap, RefreshCw,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useLayoutStore } from '../../stores/layout-store'
@@ -551,25 +551,30 @@ function ModelsView() {
     promptTokens: number; completionTokens: number; totalTokens: number
     durationMs: number; success: boolean; createdAt: string
   }>>([])
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
   const loadData = async () => {
+    setLoading(true)
     try {
       const { loadLLMData } = await import('../../services/stats-service')
       const { stats: s, history: h } = await loadLLMData(30)
       setStats(s)
       setHistory(h)
     } catch { /* 忽略 */ }
+    finally { setLoading(false) }
   }
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {stats && (
-        <div
-          className="flex items-center gap-4 px-4 py-2 flex-shrink-0"
-          style={{ borderBottom: '1px solid var(--color-border)' }}
-        >
+      {/* 统计栏：带手动刷新，避免面板打开期间看起来「统计不生效」 */}
+      <div
+        className="flex items-center gap-4 px-4 py-2 flex-shrink-0"
+        style={{ borderBottom: '1px solid var(--color-border)' }}
+      >
+        {stats ? (
+          <>
           <div className="text-[0.7rem] text-[var(--color-text-muted)]">
             <span className="font-bold text-sm text-[var(--color-text)]">{stats.totalCalls}</span> {t('common.calls')}
           </div>
@@ -582,8 +587,21 @@ function ModelsView() {
           <div className="text-[0.7rem] text-[var(--color-text-muted)]">
             {t('common.output')} <span className="font-mono text-[var(--color-text-secondary)]">{(stats.totalCompletionTokens / 1000).toFixed(1)}k</span>
           </div>
-        </div>
-      )}
+          </>
+        ) : (
+          <span className="text-[0.7rem] text-[var(--color-text-muted)]">{t('common.noRecords')}</span>
+        )}
+        <button
+          type="button"
+          className="ml-auto flex items-center gap-1 text-[0.7rem] px-2 py-1 rounded hover:bg-[var(--color-hover)] transition-colors"
+          style={{ color: 'var(--color-text-muted)' }}
+          onClick={loadData}
+          disabled={loading}
+        >
+          {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+          {t('common.refresh')}
+        </button>
+      </div>
       <div className="flex-1 overflow-y-auto font-mono text-xs">
         {history.length === 0 ? (
           <div className="flex items-center justify-center h-full opacity-30 text-sm">{t('common.noRecords')}</div>

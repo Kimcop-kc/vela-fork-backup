@@ -58,6 +58,32 @@ export interface FinalizeOnlyParams {
   draftContent: string
 }
 
+/** 定性审稿参数 */
+export interface QualitativeReviewOnlyParams {
+  chapterNumber: number
+  chapterTitle: string
+  draftPath: string
+  draftContent: string
+  reviewFocus?: string
+}
+
+/** 去 AI 味修订参数（显式发起） */
+export interface DeaiReviseParams {
+  chapterNumber: number
+  chapterTitle: string
+  draftPath: string
+  draftContent: string
+  /** 只处理指定的痕迹类型；缺省时处理全部 */
+  kinds?: Array<'high-frequency-word' | 'monotonous-sentence' | 'over-summary'>
+}
+
+/** 文风指南编译参数 */
+export interface CompileStyleGuideParams {
+  referenceText: string
+  sourceTitle: string
+  applyToProject?: boolean
+}
+
 // ==========================================
 // 2. 草稿文件工具函数 (供前端 UI 侧调用)
 // ==========================================
@@ -207,6 +233,141 @@ export function createReviewOnlyWorkflow(params: ReviewOnlyParams): WorkflowDefi
       },
     ],
     onComplete: { mode: 'open', message: t('workflowDefs.chapterReviewCompleted', { chapter: params.chapterNumber }) },
+  }
+}
+
+/**
+ * 定性审稿工作流
+ *
+ * 产出可追溯的 observation 与 AI 痕迹标记，并在编辑器里打开审稿报告。
+ * 注意：本工作流不修改正文，也不产生通过/失败判定。
+ */
+export function createQualitativeReviewWorkflow(params: QualitativeReviewOnlyParams): WorkflowDefinition {
+  // 报告内容在 executor 里产生，onComplete 也要用它打开页签，所以存在闭包里
+  let lastReviewJson = ''
+  return {
+    type: 'chapter_creation',
+    title: t('workflowDefs.qualitativeReviewTitle', { chapter: params.chapterNumber }),
+    steps: [
+      {
+        name: t('workflowDefs.qualitativeReviewStepName'),
+        description: t('workflowDefs.qualitativeReviewStepDesc'),
+        executor: async (step, context, callbacks) => {
+          const { QualitativeReviewCommand } = await import('./commands/qualitative-review.command')
+          const cmd = new QualitativeReviewCommand({
+            chapterNumber: params.chapterNumber,
+            chapterTitle: params.chapterTitle,
+            draftPath: params.draftPath,
+            draftContent: params.draftContent,
+            reviewFocus: params.reviewFocus,
+          })
+          const review = await cmd.execute({ step, context, callbacks })
+          context.data.qualitativeReview = review
+          // 页签直接渲染结构化 JSON：观察与痕迹都能被逐条定位，而不是一段富文本
+          lastReviewJson = JSON.stringify(review)
+          return lastReviewJson
+        },
+      },
+    ],
+    onComplete: {
+      mode: 'open',
+      message: t('workflowDefs.qualitativeReviewCompleted', { chapter: params.chapterNumber }),
+      openResult: async () => {
+        if (!lastReviewJson) return
+        const { useEditorStore } = await import('../../stores/editor-store')
+        useEditorStore.getState().openFile({
+          id: `qualitative-review-${params.chapterNumber}-${Date.now()}`,
+          name: t('workflowDefs.qualitativeReviewTitle', { chapter: params.chapterNumber }),
+          type: 'review-report',
+          content: lastReviewJson,
+          filePath: params.draftPath,
+          reviewReport: lastReviewJson,
+          chapterNumber: params.chapterNumber,
+          chapterDir: `vela://draft/ch${params.chapterNumber}`,
+        })
+      },
+    },
+  }
+}
+
+/**
+ * 去 AI 味修订工作流（显式发起）。
+ *
+ * 语义改写方法来自可替换的 de-ai-tone Skill；
+ * 结果以「待审阅修订」的形式产出，不自动替换原稿。
+ */
+export function createDeaiReviseWorkflow(params: DeaiReviseParams): WorkflowDefinition {
+  return {
+    type: 'chapter_creation',
+    title: t('workflowDefs.deaiTitle', { chapter: params.chapterNumber }),
+    steps: [
+      {
+        name: t('workflowDefs.deaiStepName'),
+        description: t('workflowDefs.deaiStepDesc'),
+        executor: async (step, context, callbacks) => {
+          const { DeaiReviseCommand } = await import('./commands/deai-revise.command')
+          const cmd = new DeaiReviseCommand({
+            chapterNumber: params.chapterNumber,
+            chapterTitle: params.chapterTitle,
+            draftPath: params.draftPath,
+            draftContent: params.draftContent,
+            kinds: params.kinds,
+          })
+          return cmd.execute({ step, context, callbacks })
+        },
+      },
+    ],
+    onComplete: { mode: 'open', message: t('workflowDefs.deaiCompleted', { chapter: params.chapterNumber }) },
+  }
+}
+
+/**
+ * 文风指南编译工作流。
+ *
+ * 按激活的仿写 Skill 把参考文本编译成有证据的可执行文风指南；
+ * 是否写入项目文风设定由 applyToProject 显式决定。
+ */
+export function createCompileStyleGuideWorkflow(params: CompileStyleGuideParams): WorkflowDefinition {
+  // 指南内容在 executor 里产生，onComplete 也要用它开页签，所以存在闭包里
+  let lastGuide = ''
+  let lastTitle = params.sourceTitle
+  return {
+    type: 'style_study',
+    title: t('workflowDefs.styleGuideTitle'),
+    steps: [
+      {
+        name: t('workflowDefs.styleGuideStepName'),
+        description: t('workflowDefs.styleGuideStepDesc'),
+        executor: async (step, context, callbacks) => {
+          const { CompileStyleGuideCommand } = await import('./commands/compile-style-guide.command')
+          const cmd = new CompileStyleGuideCommand({
+            referenceText: params.referenceText,
+            sourceTitle: params.sourceTitle,
+            applyToProject: params.applyToProject,
+          })
+          const guide = await cmd.execute({ step, context, callbacks })
+          const { renderStyleGuide } = await import('../style-imitation')
+          context.data.styleGuide = guide
+          lastGuide = renderStyleGuide(guide)
+          lastTitle = guide.source.title || params.sourceTitle
+          return lastGuide
+        },
+      },
+    ],
+    onComplete: {
+      mode: 'open',
+      message: t('workflowDefs.styleGuideCompleted'),
+      openResult: async () => {
+        if (!lastGuide) return
+        const { useEditorStore } = await import('../../stores/editor-store')
+        useEditorStore.getState().openFile({
+          id: `style-guide-${Date.now()}`,
+          name: lastTitle || t('workflowDefs.styleGuideTitle'),
+          type: 'style-guide',
+          content: lastGuide,
+        })
+      },
+    },
   }
 }
 

@@ -245,7 +245,7 @@ export function registerDatabaseController() {
 ipcMain.handle('db:revision-create', async (_event, params: {
     baseDraftId: number
     revisionIndex: number
-    revisionType: 'refine' | 'review-fix'
+    revisionType: 'refine' | 'review-fix' | 'deai'
     userPrompt?: string
     reviewSourceId?: number
     content: string

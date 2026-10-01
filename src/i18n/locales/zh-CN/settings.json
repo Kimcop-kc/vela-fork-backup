@@ -150,7 +150,19 @@
     "reverse_config": { "name": "逆向推演全局配置", "description": "从已有小说内容（知识库采样片段）反推出小说配置、四段架构和主角色卡，用于旧作续写场景" },
     "extract_characters": { "name": "提取初始角色卡", "description": "从角色图谱纯文本中提取结构化角色卡数据，用于架构生成后自动创建角色卡 JSON 文件" },
     "reverse_blueprint": { "name": "逆向推演单章蓝图", "description": "从已有小说章节正文高精度反推出该章的结构化蓝图信息，用于导入旧作场景" },
-    "vector_enhanced": { "name": "向量采样增强推演", "description": "利用向量检索采样的精确内容片段，增强全局配置推演的准确度" }
+    "vector_enhanced": { "name": "向量采样增强推演", "description": "利用向量检索采样的精确内容片段，增强全局配置推演的准确度" },
+    "qualitative_review": {
+      "name": "定性审稿",
+      "description": "按六个维度输出可追溯的观察（不做通过/失败判定）"
+    },
+    "style_imitation": {
+      "name": "文风仿写编译",
+      "description": "按激活的仿写 Skill，把参考文本编译为有证据的可执行文风指南"
+    },
+    "deai_revise": {
+      "name": "去 AI 味修订",
+      "description": "按激活的去 AI 味 Skill，针对被标记位置做语义改写"
+    }
   },
   "promptVariables": {
     "user_idea": "用户输入的灵感/想法",

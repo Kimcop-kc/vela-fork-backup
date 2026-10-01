@@ -21,6 +21,15 @@ export class BasePromptBuilder {
     this.template = template;
   }
 
+  /**
+   * 批量注入模板变量。
+   * 供没有专用 Builder 的模板使用，避免调用方通过类型断言直接改 protected 变量。
+   */
+  public withVariables(vars: Record<string, string>) {
+    Object.assign(this.variables, vars);
+    return this;
+  }
+
   /** 获取模板定义的 system role（LLM system message 角色定位） */
   public getSystemRole(): string {
     return getLocalizedSystemRole(this.template)

@@ -50,7 +50,7 @@ export class RevisionRepository {
     static create(params: {
         baseDraftId: number
         revisionIndex: number
-        revisionType: 'refine' | 'review-fix'
+        revisionType: 'refine' | 'review-fix' | 'deai'
         userPrompt?: string
         reviewSourceId?: number
         content: string

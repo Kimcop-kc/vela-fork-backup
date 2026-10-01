@@ -7,6 +7,15 @@ const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'co
 import { getPromptTemplate } from '../../prompt-templates'
 import { PostProcessPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
+import {
+  buildCharacterFilterDirective,
+  buildSegmentDirective,
+  chunkArray,
+  mergeByKey,
+  mergeChapterNotes,
+  resolveGenerationBudgets,
+  splitTextByTokenBudget,
+} from '../segmented-generation'
 
 import {
   runPostProcessPipeline,
@@ -31,7 +40,8 @@ export interface FinalizeChapterParams {
  * 独立函数，可被 PostProcessStep 的 executor 直接调用
  */
 async function callLLMForPostProcess(
-  builder: { build: () => string; getSystemRole: () => string },
+  prompt: string,
+  systemRole: string,
   callbacks: { appendText: (text: string) => void },
   options?: { responseFormat?: { type: string } },
 ): Promise<string> {
@@ -42,8 +52,8 @@ async function callLLMForPostProcess(
     let fullContent = ''
     llmStore.generateStream(
       [
-        { role: 'system', content: builder.getSystemRole() },
-        { role: 'user', content: builder.build() },
+        { role: 'system', content: systemRole },
+        { role: 'user', content: prompt },
       ],
       {
         onChunk: (chunk) => { fullContent += chunk; callbacks.appendText(chunk) },
@@ -57,6 +67,13 @@ async function callLLMForPostProcess(
       options,
     )
   })
+}
+
+/** 读取当前默认模型的 token 预算，供分段生成使用 */
+function currentGenerationBudgets() {
+  const llmStore = useLLMStore.getState()
+  const model = llmStore.models.find(m => m.id === llmStore.defaultModelId)
+  return resolveGenerationBudgets(model?.maxTokens)
 }
 
 /** 容错 JSON 解析（剥离 Markdown 代码块 + 自动截取有效 JSON 边界） */
@@ -118,12 +135,28 @@ export function buildFinalizePostProcessSteps(
       label: t('finalize.chapterNotes'),
       critical: true,
       executor: async (callbacks) => {
-        const notesBuilder = new PostProcessPromptBuilder(notesTemplate)
-          .withChapterContent(draftContent)
-          .withChapterNumber(chapterNumber)
-          .withChapterTitle(chapterTitle)
-
-        const cleanNotes = await callLLMForPostProcess(notesBuilder, callbacks)
+        // 长章节按 token 预算切段逐段生成要点，再合并成一份，避免单次请求超出上下文导致要点缺失
+        const budgets = currentGenerationBudgets()
+        const contentChunks = splitTextByTokenBudget(draftContent, budgets.inputTokens - 1500)
+        const notesParts: string[] = []
+        for (let index = 0; index < contentChunks.length; index++) {
+          if (contentChunks.length > 1) {
+            callbacks.log(t('segmented.chunkLog', { index: index + 1, total: contentChunks.length }))
+          }
+          const notesBuilder = new PostProcessPromptBuilder(notesTemplate)
+            .withChapterContent(contentChunks[index])
+            .withChapterNumber(chapterNumber)
+            .withChapterTitle(chapterTitle)
+          let prompt = notesBuilder.build()
+          if (contentChunks.length > 1) {
+            prompt += buildSegmentDirective(index + 1, contentChunks.length, t('finalize.notesSegmentHint'))
+          }
+          notesParts.push(await callLLMForPostProcess(prompt, notesBuilder.getSystemRole(), callbacks))
+        }
+        const cleanNotes = contentChunks.length > 1 ? mergeChapterNotes(notesParts) : (notesParts[0] ?? '')
+        if (contentChunks.length > 1) {
+          callbacks.log(t('segmented.chunkDoneLog', { total: contentChunks.length }))
+        }
 
         // 写入蓝图 JSON 的 notes 字段
         await ipc.invoke('db:blueprint-update-notes', chapterNumber, cleanNotes)
@@ -232,12 +265,6 @@ export function buildFinalizePostProcessSteps(
         const allChars = (await ipc.invoke('db:character-get-all')) as unknown as Array<Record<string, unknown>>
         const simpleCards = allChars.map((c) => ({ name: c.name, role: c.role }))
 
-        const cardBuilder = new PostProcessPromptBuilder(cardTemplate)
-          .withChapterContent(draftContent.slice(0, 5000))
-          .withChapterNumber(chapterNumber)
-          .withExistingCardsJson(simpleCards)
-
-        const cardsResult = await callLLMForPostProcess(cardBuilder, callbacks, { responseFormat: { type: 'json_object' } })
         type LLMUpdateState = {
           location?: string
           powerLevel?: string
@@ -246,11 +273,54 @@ export function buildFinalizePostProcessSteps(
           keyItems?: string
           recentEvents?: string
         }
+        type LLMCardUpdate = { name: string; currentState: LLMUpdateState }
+        type LLMNewCharacter = { name: string; role: string; currentState: LLMUpdateState }
+        type LLMCardResult = { updates?: LLMCardUpdate[]; newCharacters?: LLMNewCharacter[] }
 
-        const cardUpdates = parseJSON<{
-          updates?: Array<{ name: string; currentState: LLMUpdateState }>
-          newCharacters?: Array<{ name: string; role: string; currentState: LLMUpdateState }>
-        }>(cardsResult)
+        // 双向分段：正文按 token 预算切段 + 角色卡按条数分批，
+        // 避免一次性输出全部角色状态被输出上限截断（旧实现还会硬截断正文前 5000 字）
+        const budgets = currentGenerationBudgets()
+        const contentChunks = splitTextByTokenBudget(draftContent, budgets.inputTokens - 3000)
+        const cardsPerCall = Math.max(1, Math.min(12, Math.floor((budgets.outputTokens * 0.5) / 150)))
+        const cardGroups = chunkArray(simpleCards, cardsPerCall)
+        const chunkList = contentChunks.length > 0 ? contentChunks : ['']
+        const groupList = cardGroups.length > 0 ? cardGroups : [[] as Array<{ name: unknown; role: unknown }>]
+        const totalCalls = chunkList.length * groupList.length
+
+        const collectedUpdates: Array<Record<string, unknown>> = []
+        const collectedNewCharacters: Array<Record<string, unknown>> = []
+        let callIndex = 0
+
+        for (const contentChunk of chunkList) {
+          for (const cardGroup of groupList) {
+            callIndex++
+            if (totalCalls > 1) {
+              callbacks.log(t('segmented.chunkLog', { index: callIndex, total: totalCalls }))
+            }
+            const cardBuilder = new PostProcessPromptBuilder(cardTemplate)
+              .withChapterContent(contentChunk)
+              .withChapterNumber(chapterNumber)
+              .withExistingCardsJson(cardGroup)
+            let prompt = cardBuilder.build()
+            if (totalCalls > 1) {
+              prompt += buildSegmentDirective(callIndex, totalCalls, t('finalize.cardsSegmentHint'))
+              prompt += buildCharacterFilterDirective(cardGroup.map(card => String(card.name)))
+            }
+            const cardsResult = await callLLMForPostProcess(prompt, cardBuilder.getSystemRole(), callbacks, { responseFormat: { type: 'json_object' } })
+            const parsedCards = parseJSON<LLMCardResult>(cardsResult)
+            collectedUpdates.push(...(Array.isArray(parsedCards.updates) ? parsedCards.updates : []))
+            collectedNewCharacters.push(...(Array.isArray(parsedCards.newCharacters) ? parsedCards.newCharacters : []))
+          }
+        }
+        if (totalCalls > 1) {
+          callbacks.log(t('segmented.chunkDoneLog', { total: totalCalls }))
+        }
+
+        // 分段结果按角色名合并：后出现的段落代表更接近章末的状态，冲突时覆盖
+        const cardUpdates: LLMCardResult = {
+          updates: mergeByKey([collectedUpdates], { keyOf: (item) => String(item.name ?? '') }) as unknown as LLMCardUpdate[],
+          newCharacters: mergeByKey([collectedNewCharacters], { keyOf: (item) => String(item.name ?? '') }) as unknown as LLMNewCharacter[],
+        }
 
         if (cardUpdates.updates && Array.isArray(cardUpdates.updates)) {
           for (const upd of cardUpdates.updates) {

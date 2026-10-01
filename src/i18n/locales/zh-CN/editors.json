@@ -15,28 +15,74 @@
     "reviewing": "正在复核作者约束与方案差异 · 已收到 {{count}} 字符",
     "formatRetry": "返回格式不符，正在重新生成完整方案（本阶段仅重试一次）· 已收到 {{count}} 字符",
     "externalBlueprintChange": "新的蓝图已生成；当前未保存的编辑已保留，请处理后再重新加载。",
-    "planFields": { "genre": "题材", "premise": "故事前提", "worldbuilding": "世界设定", "charactersArch": "人物设计", "synopsis": "故事计划", "writingStyle": "文风", "globalGuidance": "全书创作指导" },
-    "title": "剧情试演", "subtitle": "第 {{chapter}} 章 · 比较情节方向，再试写一场",
-    "intent": "创作意图", "intentPlaceholder": "例如：让师父真正出卖主角，但读者最终仍能理解他。",
-    "constraints": "必须保留的约束", "constraintsPlaceholder": "例如：主角不轻易原谅；对手有合理筹码；动机可以延后揭晓。",
-    "model": "生成模型", "noModel": "请先在设置中添加生成模型", "generate": "试演三个方向", "regenerate": "重新试演",
+    "planFields": {
+      "genre": "题材",
+      "premise": "故事前提",
+      "worldbuilding": "世界设定",
+      "charactersArch": "人物设计",
+      "synopsis": "故事计划",
+      "writingStyle": "文风",
+      "globalGuidance": "全书创作指导"
+    },
+    "title": "剧情试演",
+    "subtitle": "第 {{chapter}} 章 · 比较情节方向，再试写一场",
+    "intent": "创作意图",
+    "intentPlaceholder": "例如：让师父真正出卖主角，但读者最终仍能理解他。",
+    "constraints": "必须保留的约束",
+    "constraintsPlaceholder": "例如：主角不轻易原谅；对手有合理筹码；动机可以延后揭晓。",
+    "model": "生成模型",
+    "noModel": "请先在设置中添加生成模型",
+    "generate": "试演三个方向",
+    "regenerate": "重新试演",
     "contextHint": "参考当前蓝图、设定计划及之前最近三章定稿片段。切换章节保留本页试演；离开页面前请复制片段。",
-    "generating": "正在生成 · 已收到 {{count}} 字符", "cancel": "取消生成", "cancelled": "已取消生成，已有结果仍保留。",
-    "choices": "情节方向", "director": "场景与信息揭示", "directorDefault": "从主角视角写。只露出可感知的线索，暂不直接解释隐藏动机。",
-    "writeScene": "试写短场景", "rewriteScene": "重新试写", "adopt": "追加到作者指导", "adoptHint": "只追加所选方向与场景指导，保留现有蓝图；回到蓝图后保存。试写正文可单独复制。",
-    "scene": "试写片段 · 可编辑", "sceneUsedDirector": "本次试写采用的指导：{{director}}", "copy": "复制片段", "copied": "片段已复制。", "copyFailed": "复制失败，请在文本框中选中并复制。",
-    "sources": "查看本次参考内容", "sourcesHint": "这些是有限的正文片段，并非全书记忆。缺少的铺垫需要作者核实或补充。",
-    "noHistory": "本章之前没有可用的定稿正文。", "excerpt": "第 {{chapter}} 章 · 定稿 v{{version}}", "excerptTail": "末尾 2400 字符",
-    "authorPlan": "设定与计划（不代表已发生事实）", "truncated": "长字段已节选", "none": "无额外约束",
-    "guidanceTitle": "【剧情试演选定方向：{{title}}】", "proposalBoundary": "以上为作者选定的后续创作计划，尚未成为正文事实；待补铺垫不可当作已经发生。",
-    "adopted": "已追加到作者指导，请保存蓝图。", "saveFailed": "蓝图保存失败：{{message}}",
-    "fields": { "premise": "核心走法", "motive": "人物动机与替代选择", "opposition": "对手应对与阻力", "cost": "真实代价", "aftermath": "后续影响", "setup": "已有依据与待补铺垫", "risk": "创作取舍与不确定性", "events": "拟定事件" },
+    "generating": "正在生成 · 已收到 {{count}} 字符",
+    "cancel": "取消生成",
+    "cancelled": "已取消生成，已有结果仍保留。",
+    "choices": "情节方向",
+    "director": "场景与信息揭示",
+    "directorDefault": "从主角视角写。只露出可感知的线索，暂不直接解释隐藏动机。",
+    "writeScene": "试写短场景",
+    "rewriteScene": "重新试写",
+    "adopt": "追加到作者指导",
+    "adoptHint": "只追加所选方向与场景指导，保留现有蓝图；回到蓝图后保存。试写正文可单独复制。",
+    "scene": "试写片段 · 可编辑",
+    "sceneUsedDirector": "本次试写采用的指导：{{director}}",
+    "copy": "复制片段",
+    "copied": "片段已复制。",
+    "copyFailed": "复制失败，请在文本框中选中并复制。",
+    "sources": "查看本次参考内容",
+    "sourcesHint": "这些是有限的正文片段，并非全书记忆。缺少的铺垫需要作者核实或补充。",
+    "noHistory": "本章之前没有可用的定稿正文。",
+    "excerpt": "第 {{chapter}} 章 · 定稿 v{{version}}",
+    "excerptTail": "末尾 2400 字符",
+    "authorPlan": "设定与计划（不代表已发生事实）",
+    "truncated": "长字段已节选",
+    "none": "无额外约束",
+    "guidanceTitle": "【剧情试演选定方向：{{title}}】",
+    "proposalBoundary": "以上为作者选定的后续创作计划，尚未成为正文事实；待补铺垫不可当作已经发生。",
+    "adopted": "已追加到作者指导，请保存蓝图。",
+    "saveFailed": "蓝图保存失败：{{message}}",
+    "fields": {
+      "premise": "核心走法",
+      "motive": "人物动机与替代选择",
+      "opposition": "对手应对与阻力",
+      "cost": "真实代价",
+      "aftermath": "后续影响",
+      "setup": "已有依据与待补铺垫",
+      "risk": "创作取舍与不确定性",
+      "events": "拟定事件"
+    },
     "errors": {
-      "NO_MODEL": "请先配置并选择可用的生成模型。", "INVALID_INPUT": "请填写创作意图；意图和约束各不超过 3000 字符。",
-      "INVALID_CHAPTER": "章节编号无效，请检查蓝图。", "INVALID_RESPONSE": "模型返回的内容不完整或格式不符。可以重试或更换模型；已有结果未被覆盖。",
-      "DUPLICATE_DIRECTIONS": "模型给出了重复方向，请重新试演。", "PROJECT_CHANGED": "项目已切换，当前试演已停止。请在目标项目中重新打开试演。",
-      "PROJECT_CLOSED": "项目数据库已关闭，请重新打开项目。", "BLUEPRINT_CHANGED": "蓝图已改变，请重新试演后再采用，避免覆盖新编辑。",
-      "GENERATION_TIMEOUT": "生成超时，已停止请求，可以重试。", "generic": "操作失败：{{message}}"
+      "NO_MODEL": "请先配置并选择可用的生成模型。",
+      "INVALID_INPUT": "请填写创作意图；意图和约束各不超过 3000 字符。",
+      "INVALID_CHAPTER": "章节编号无效，请检查蓝图。",
+      "INVALID_RESPONSE": "模型返回的内容不完整或格式不符。可以重试或更换模型；已有结果未被覆盖。",
+      "DUPLICATE_DIRECTIONS": "模型给出了重复方向，请重新试演。",
+      "PROJECT_CHANGED": "项目已切换，当前试演已停止。请在目标项目中重新打开试演。",
+      "PROJECT_CLOSED": "项目数据库已关闭，请重新打开项目。",
+      "BLUEPRINT_CHANGED": "蓝图已改变，请重新试演后再采用，避免覆盖新编辑。",
+      "GENERATION_TIMEOUT": "生成超时，已停止请求，可以重试。",
+      "generic": "操作失败：{{message}}"
     }
   },
   "archFile": {
@@ -201,7 +247,12 @@
       "characterDesc": "能力/位置/情感一致性",
       "foreshadow": "前后章节串联",
       "foreshadowDesc": "伏笔、悬念连贯"
-    }
+    },
+    "qualitativeReview": "定性审稿",
+    "qualitativeReviewTooltip": "记录角色记忆、物资连续性、伏笔回收、大纲偏离、叙事节奏、情感弧线等维度的观察，并标出可修订的 AI 痕迹位置",
+    "qualitativeReviewDialogTitle": "定性审稿",
+    "qualitativeReviewDescription": "只记录可追溯的创作观察与 AI 痕迹标记，不做通过/失败判定，也不会自动改稿；需要修订时可在审稿报告里显式选择条目。",
+    "qualitativeReviewStartFailed": "定性审稿启动失败：{{error}}"
   },
   "versionHistory": {
     "loading": "加载中...",
@@ -258,6 +309,30 @@
         "label": "检查通过",
         "actionLabel": "无需处理"
       }
+    },
+    "qualitative": {
+      "title": "定性审稿",
+      "statsLine": "正文 {{characters}} 字 · {{paragraphs}} 段 · {{sentences}} 句 · 对话占比 {{dialogue}}%",
+      "contextLine": "对照基线：时间线 {{timeline}} 条 · 角色状态 {{characters}} 条 · 未结剧情线 {{plots}} 条 · 已知事实 {{facts}} 条",
+      "contextUnavailable": "本次审稿没有既定事实基线可供对照",
+      "observationSection": "审稿观察（{{count}} 条）",
+      "noObservations": "本次没有记录到观察",
+      "originRule": "本地规则检测",
+      "evidenceLine": "第 {{line}} 行",
+      "evidenceUnlocated": "未能自动定位",
+      "suggestion": "建议：",
+      "aiTraceSection": "AI 痕迹（{{count}} 处可修订位置）",
+      "noAiTraces": "未检测到需要标记的 AI 痕迹",
+      "metricLine": "指标：{{label}} = {{value}}（阈值 {{threshold}}）",
+      "deai": "去 AI 味",
+      "deaiDescription": "按上面的标记做语义改写。方法来自可替换的「去 AI 味」Skill，结果只生成待审阅修订，不会自动替换原稿。",
+      "noDraft": "未找到对应的草稿，无法发起修订。",
+      "deaiStartFailed": "去 AI 味启动失败：{{error}}",
+      "reviseSelected": "修稿（已选 {{count}} 条）",
+      "reviseStartFailed": "修稿启动失败：{{error}}",
+      "selectAll": "全选",
+      "selectNone": "全不选",
+      "notVerdict": "以上是可追溯的创作反馈，不是通过/失败判定；是否修订由你决定。"
     }
   },
   "worldBuilding": {
@@ -377,6 +452,22 @@
       "saveFailed": "保存失败",
       "noAIModel": "请先在设置中配置 AI 模型",
       "generateFailed": "生成失败"
+    },
+    "styleGuide": {
+      "button": "从参考文本编译文风指南",
+      "title": "编译文风指南",
+      "description": "粘贴一段参考文本，按激活的「文风仿写」Skill 归纳出可执行的文风指南；每条规则都附参考文本证据。",
+      "referenceLabel": "参考文本",
+      "referencePlaceholder": "粘贴要仿写的作者正文（至少 200 字）",
+      "sourceLabel": "来源标题",
+      "sourcePlaceholder": "例如：某某《某某》第 3 章",
+      "applyLabel": "编译后写入本项目文风设定",
+      "applyHint": "不勾选时只生成指南，不改动现有文风设定。",
+      "confirm": "开始编译",
+      "cancel": "取消",
+      "tooShort": "参考文本至少需要 200 字",
+      "startFailed": "启动失败：{{error}}",
+      "skillNote": "方法与 Skill 绑定：把同名 SKILL.md 放进 ~/.vela/skills/ 即可替换默认仿写方法。"
     }
   },
   "threeWayMerge": {
@@ -500,5 +591,11 @@
       "byWord": "全词匹配",
       "close": "关闭"
     }
+  },
+  "styleGuideView": {
+    "title": "文风指南",
+    "hint": "本指南由「文风仿写」Skill 编译，每条规则都指得回参考文本。",
+    "source": "参考来源：{{title}}",
+    "noEvidence": "（本指南没有无证据规则）"
   }
 }

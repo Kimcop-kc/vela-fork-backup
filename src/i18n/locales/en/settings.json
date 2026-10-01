@@ -150,7 +150,19 @@
     "reverse_config": { "name": "Reverse Engineer Config", "description": "Reverse-engineer novel configuration, four-part architecture, and protagonist card from existing novel content for continuation scenarios" },
     "extract_characters": { "name": "Extract Character Cards", "description": "Extract structured character card data from character map plaintext for auto-creating character card JSON files after architecture generation" },
     "reverse_blueprint": { "name": "Reverse Engineer Blueprint", "description": "Reverse-engineer structured chapter blueprint from existing chapter prose for import scenarios" },
-    "vector_enhanced": { "name": "Vector-Enhanced Inference", "description": "Use vector-retrieved content snippets to enhance the accuracy of global configuration inference" }
+    "vector_enhanced": { "name": "Vector-Enhanced Inference", "description": "Use vector-retrieved content snippets to enhance the accuracy of global configuration inference" },
+    "qualitative_review": {
+      "name": "Qualitative review",
+      "description": "Record traceable observations across six dimensions (no pass/fail verdict)"
+    },
+    "style_imitation": {
+      "name": "Style guide compilation",
+      "description": "Compile reference text into an evidence-backed, executable style guide via the active imitation Skill"
+    },
+    "deai_revise": {
+      "name": "De-AI revision",
+      "description": "Rewrite the marked positions semantically via the active de-AI Skill"
+    }
   },
   "promptVariables": {
     "user_idea": "User's creative idea",

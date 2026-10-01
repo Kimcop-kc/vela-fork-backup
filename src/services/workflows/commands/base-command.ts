@@ -24,7 +24,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     prompt: string, 
     systemPrompt: string, 
     callbacks: StepCallbacks,
-    options?: { responseFormat?: { type: string }; thinking?: boolean },
+    options?: { responseFormat?: { type: string }; thinking?: boolean; maxTokens?: number; purpose?: string },
     context?: WorkflowContext
   ): Promise<string> {
     const llmStore = useLLMStore.getState()
@@ -86,7 +86,8 @@ export abstract class BaseWorkflowCommand<TResult = string> {
           }
         },
         undefined,
-        options
+        // 未显式指定用途时，用命令类名兜底，保证统计面板能区分「token 花在哪个环节」
+        { ...options, purpose: options?.purpose ?? this.constructor.name }
       ).then(reqId => {
         streamRequestId = reqId
         // 如果在 generateStream 返回前已经取消
@@ -109,7 +110,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   protected async callLLMWithBuilder(
     builder: BasePromptBuilder,
     callbacks: StepCallbacks,
-    options?: { responseFormat?: { type: string }; thinking?: boolean },
+    options?: { responseFormat?: { type: string }; thinking?: boolean; maxTokens?: number; purpose?: string },
     context?: WorkflowContext
   ): Promise<string> {
     return this.callLLM(builder.build(), builder.getSystemRole(), callbacks, options, context)
@@ -155,4 +156,3 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     globalEventBus.emit('REFRESH_RESOURCE', { resources })
   }
 }
-

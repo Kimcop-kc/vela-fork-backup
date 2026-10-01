@@ -13,7 +13,17 @@ import { getPromptTemplate } from '../../prompt-templates'
 import { ImportPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
 import i18n from '../../../i18n'
+import { useLLMStore } from '../../../stores/llm-store'
 import type { CharacterData } from '../../../../electron/repositories/character-repository'
+import {
+  buildSegmentDirective,
+  estimateTokens,
+  mergeByKey,
+  mergeFilled,
+  parseLooseJson,
+  resolveGenerationBudgets,
+  splitTextByTokenBudget,
+} from '../segmented-generation'
 
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'commands', ...opts })
 
@@ -23,6 +33,71 @@ export interface ImportedChapter {
   title: string
   content: string
   wordCount: number
+}
+
+/** 逆向推演的部分结果（分段生成时每个片段返回一份） */
+interface InferPartial {
+  novelConfig?: Record<string, string>
+  architectureFiles?: Record<string, string>
+  characterCards?: Array<Record<string, unknown>>
+}
+
+/** 供分段推演使用的采样片段 */
+interface InferSampleField {
+  key: 'worldview' | 'protagonist' | 'conflict' | 'style' | 'first' | 'latest'
+  label: string
+  text: string
+}
+
+/** 读取当前默认模型的 token 预算，供分段生成使用 */
+function currentGenerationBudgets() {
+  const llmStore = useLLMStore.getState()
+  const model = llmStore.models.find(m => m.id === llmStore.defaultModelId)
+  return resolveGenerationBudgets(model?.maxTokens)
+}
+
+/** 按 token 预算把采样片段切成多组（分段推演：单组输入不超出上下文预算） */
+function groupSampleFields(fields: InferSampleField[], maxTokensPerGroup: number): InferSampleField[][] {
+  const groups: InferSampleField[][] = []
+  let current: InferSampleField[] = []
+  let used = 0
+  for (const field of fields) {
+    const cost = estimateTokens(field.text) + 200
+    if (current.length > 0 && used + cost > maxTokensPerGroup) {
+      groups.push(current)
+      current = []
+      used = 0
+    }
+    current.push(field)
+    used += cost
+  }
+  if (current.length > 0) groups.push(current)
+  return groups
+}
+
+/** 合并分段推演结果：描述性字段取信息量最大者，角色卡按名字去重 */
+function mergeInferPartials(partials: InferPartial[]): {
+  novelConfig: Record<string, string>
+  architectureFiles: Record<string, string>
+  characterCards: Array<Record<string, unknown>>
+} {
+  let novelConfig: Record<string, unknown> = {}
+  let architectureFiles: Record<string, unknown> = {}
+  const characterCards: Array<Record<string, unknown>> = []
+  for (const partial of partials) {
+    if (partial.novelConfig) {
+      novelConfig = mergeFilled(novelConfig, { ...partial.novelConfig }, 'richest')
+    }
+    if (partial.architectureFiles) {
+      architectureFiles = mergeFilled(architectureFiles, { ...partial.architectureFiles }, 'richest')
+    }
+    if (Array.isArray(partial.characterCards)) characterCards.push(...partial.characterCards)
+  }
+  return {
+    novelConfig: novelConfig as Record<string, string>,
+    architectureFiles: architectureFiles as Record<string, string>,
+    characterCards: mergeByKey([characterCards], { keyOf: (card) => String(card.name ?? ''), prefer: 'last' }),
+  }
 }
 
 // =================================================================
@@ -150,37 +225,72 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     const firstChapter = chapters[0]?.content?.slice(0, 3000) || t('importNovel.firstChapterUnavailable')
     const latestChapter = chapters[chapters.length - 1]?.content?.slice(0, 3000) || t('importNovel.latestChapterUnavailable')
 
-    const prompt = new ImportPromptBuilder(template)
-      .withSampledWorldview(sampledContent.worldview || '')
-      .withSampledProtagonist(sampledContent.protagonist || '')
-      .withSampledConflict(sampledContent.conflict || '')
-      .withSampledStyle(sampledContent.style || '')
-      .withFirstChapter(firstChapter)
-      .withLatestChapter(latestChapter)
-      .withTotalChapters(chapters.length)
-      // 兼容旧版 Prompt 的 sample_content 变量
-      .withSampleContent(`【第1章片段】\n${firstChapter}\n\n【最新章节片段】\n${latestChapter}`)
-      .build()
+    // ===== 分段推演：把采样片段按 token 预算切组，逐组推演后再合并 =====
+    // 一次性把「首章 + 最新章 + 四类向量片段」塞进一个 Prompt 时，超长输入会挤占输出预算，
+    // 导致返回的 JSON 被截断、字段大量缺失；分段后每段输入更短，单次输出更完整。
+    const budgets = currentGenerationBudgets()
+    const allSampleFields: InferSampleField[] = [
+      { key: 'worldview', label: t('importNovel.searchTopicWorldview'), text: sampledContent.worldview || '' },
+      { key: 'protagonist', label: t('importNovel.searchTopicProtagonist'), text: sampledContent.protagonist || '' },
+      { key: 'conflict', label: t('importNovel.searchTopicConflict'), text: sampledContent.conflict || '' },
+      { key: 'style', label: t('importNovel.searchTopicStyle'), text: sampledContent.style || '' },
+      { key: 'first', label: t('importNovel.firstChapterLabel'), text: firstChapter },
+      { key: 'latest', label: t('importNovel.latestChapterLabel'), text: latestChapter },
+    ]
+    const sampleFields = allSampleFields.filter(field => field.text.trim() !== '')
 
-    callbacks.log(t('importNovel.inferringConfig'))
-    callbacks.setProgress(25)
+    const sampleGroups = groupSampleFields(sampleFields, budgets.inputTokens - 2000)
+    const effectiveGroups = sampleGroups.length > 0 ? sampleGroups : [[] as InferSampleField[]]
+    const partials: InferPartial[] = []
 
-    const rawResult = await this.callLLM(
-      prompt,
-      template.systemRole || '你是一位顶级网文主编和资深阅读分析师。',
-      callbacks,
-      { responseFormat: { type: 'json_object' } }
-    )
+    for (let index = 0; index < effectiveGroups.length; index++) {
+      const group = effectiveGroups[index]
+      if (effectiveGroups.length > 1) {
+        callbacks.log(t('segmented.chunkLog', { index: index + 1, total: effectiveGroups.length }))
+      }
+      callbacks.log(t('importNovel.inferringConfig'))
+      callbacks.setProgress(25 + Math.round((index / effectiveGroups.length) * 40))
+
+      const fieldText = (key: InferSampleField['key']) => group.find(field => field.key === key)?.text || ''
+      const builder = new ImportPromptBuilder(template)
+        .withSampledWorldview(fieldText('worldview'))
+        .withSampledProtagonist(fieldText('protagonist'))
+        .withSampledConflict(fieldText('conflict'))
+        .withSampledStyle(fieldText('style'))
+        .withFirstChapter(fieldText('first'))
+        .withLatestChapter(fieldText('latest'))
+        .withTotalChapters(chapters.length)
+        // 兼容旧版 Prompt 的 sample_content 变量
+        .withSampleContent(group.map(field => `【${field.label}】\n${field.text}`).join('\n\n'))
+      let prompt = builder.build()
+      if (effectiveGroups.length > 1) {
+        prompt += buildSegmentDirective(index + 1, effectiveGroups.length, t('importNovel.configSegmentHint'))
+      }
+
+      const rawResult = await this.callLLM(
+        prompt,
+        template.systemRole || '你是一位顶级网文主编和资深阅读分析师。',
+        callbacks,
+        { responseFormat: { type: 'json_object' }, maxTokens: budgets.outputTokens }
+      )
+      const parsed = parseLooseJson<InferPartial>(rawResult)
+      if (parsed) {
+        partials.push(parsed)
+      } else {
+        callbacks.log(t('segmented.chunkFallbackLog', { index: index + 1, done: partials.length, error: t('importNovel.inferChunkUnparsable') }))
+      }
+    }
+
+    if (partials.length === 0) throw new Error(t('importNovel.inferFailed'))
 
     callbacks.setProgress(70)
     callbacks.log(t('importNovel.parsingResult'))
 
-    // ===== 解析 JSON 结果 =====
-    const inferResult = this.parseJSON<{
-      novelConfig: Record<string, string>
-      architectureFiles: Record<string, string>
-      characterCards: Array<Record<string, unknown>>
-    }>(rawResult)
+    // ===== 合并分段推演结果 =====
+    const inferResult = mergeInferPartials(partials)
+    if (effectiveGroups.length > 1) {
+      callbacks.log(t('segmented.chunkDoneLog', { total: effectiveGroups.length }))
+    }
 
     // ===== 写入小说配置 =====
     if (inferResult.novelConfig) {
@@ -306,23 +416,46 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
       await Promise.all(executing)
     }
 
+    const budgets = currentGenerationBudgets()
+    const contentBudget = Math.max(2000, budgets.inputTokens - 2500)
+
     const tasks = chapters.map((ch) => async () => {
       try {
-        const prompt = new ImportPromptBuilder(template)
-          .withChapterContent(ch.content.slice(0, 6000)) // 限制单章 Prompt 长度
-          .withChapterNumber(ch.number)
-          .withChapterTitle(ch.title)
-          .withNovelConfigSummary(configSummary)
-          .build()
+        const runBlueprint = async (content: string, directive: string) => {
+          const prompt = new ImportPromptBuilder(template)
+            .withChapterContent(content)
+            .withChapterNumber(ch.number)
+            .withChapterTitle(ch.title)
+            .withNovelConfigSummary(configSummary)
+            .build() + directive
+          const rawResult = await this.callLLM(
+            prompt,
+            template.systemRole || '你是一位专业的网文结构分析师。',
+            callbacks,
+            { responseFormat: { type: 'json_object' }, maxTokens: budgets.outputTokens }
+          )
+          return this.parseJSON<Record<string, unknown>>(rawResult)
+        }
 
-        const rawResult = await this.callLLM(
-          prompt,
-          template.systemRole || '你是一位专业的网文结构分析师。',
-          callbacks,
-          { responseFormat: { type: 'json_object' } }
-        )
-
-        const blueprint = this.parseJSON<Record<string, unknown>>(rawResult)
+        // 单章正文超长时按 token 预算切段：先逐段提取本段事件，再合并成整章蓝图
+        const contentChunks = splitTextByTokenBudget(ch.content, contentBudget)
+        let blueprint: Record<string, unknown>
+        if (contentChunks.length <= 1) {
+          blueprint = await runBlueprint(ch.content, '')
+        } else {
+          const segmentNotes: string[] = []
+          for (let index = 0; index < contentChunks.length; index++) {
+            const partial = await runBlueprint(
+              contentChunks[index],
+              buildSegmentDirective(index + 1, contentChunks.length, t('importNovel.blueprintSegmentHint')),
+            )
+            const events = [partial.keyEvents, partial.suspenseHook]
+              .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+              .join(' / ')
+            if (events) segmentNotes.push(`第${index + 1}段：${events}`)
+          }
+          blueprint = await runBlueprint(segmentNotes.join('\n') || ch.content, t('importNovel.blueprintMergeDirective'))
+        }
 
         // 确保必要字段
         const finalBlueprint = {

@@ -1,11 +1,20 @@
-import { useState } from 'react'
-import { AlertTriangle, CheckCircle, Info, Sparkles, HelpCircle, Quote } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, CheckCircle, Info, HelpCircle, ListChecks, LoaderCircle, Quote, ScanText, Sparkles, WandSparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '../../lib/utils'
 import { Button } from '../ui/Button'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
+import { toast } from '../ui/Toast'
+import {
+  OBSERVATION_DIMENSIONS,
+  type AiTraceFinding,
+  type ObservationDimension,
+  type ObservationSeverity,
+  type QualitativeReview,
+  type ReviewObservation,
+} from '../../services/review'
 
 /** 审稿问题条目（JSON 格式） */
 interface ReviewIssue {
@@ -143,6 +152,61 @@ function parseLegacyReport(text: string, defaultCategory: string): { issues: Rev
   return { issues, summary: summaryLines.join(' ') }
 }
 
+// ===== 定性审稿产物（结构化 JSON） =====
+
+/** 校验一条观察是否具备可渲染的最小结构 */
+function isReviewObservation(value: unknown): value is ReviewObservation {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<ReviewObservation>
+  return typeof candidate.title === 'string' && Array.isArray(candidate.evidence)
+}
+
+/** 校验一条 AI 痕迹是否具备可渲染的最小结构 */
+function isAiTraceFinding(value: unknown): value is AiTraceFinding {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<AiTraceFinding>
+  return typeof candidate.kind === 'string' && typeof candidate.message === 'string'
+}
+
+/**
+ * 解析定性审稿产物。
+ * 不是该结构（旧版 items/summary 报告）时返回 null，交给旧版渲染器处理。
+ */
+function parseQualitativeReview(text: string): QualitativeReview | null {
+  const jsonStr = extractJSON(text)
+  if (!jsonStr) return null
+  try {
+    const data = JSON.parse(jsonStr) as Partial<QualitativeReview>
+    if (!Array.isArray(data.observations) && !Array.isArray(data.aiTraces)) return null
+    return {
+      chapterNumber: typeof data.chapterNumber === 'number' ? data.chapterNumber : 0,
+      chapterTitle: typeof data.chapterTitle === 'string' ? data.chapterTitle : '',
+      observations: Array.isArray(data.observations) ? data.observations.filter(isReviewObservation) : [],
+      aiTraces: Array.isArray(data.aiTraces) ? data.aiTraces.filter(isAiTraceFinding) : [],
+      context: {
+        timelineEvents: data.context?.timelineEvents ?? 0,
+        characterStates: data.context?.characterStates ?? 0,
+        openPlotLines: data.context?.openPlotLines ?? 0,
+        knownFacts: data.context?.knownFacts ?? 0,
+      },
+      stats: {
+        characters: data.stats?.characters ?? 0,
+        paragraphs: data.stats?.paragraphs ?? 0,
+        sentences: data.stats?.sentences ?? 0,
+        dialogueRatio: data.stats?.dialogueRatio ?? 0,
+      },
+      generatedAt: typeof data.generatedAt === 'string' ? data.generatedAt : '',
+    }
+  } catch {
+    return null
+  }
+}
+
+/** 计算字符偏移所在行号（1 基）；没有正文时返回 0 */
+function lineNumberAt(content: string, offset: number): number {
+  if (!content || offset <= 0) return 0
+  return content.slice(0, offset - 1).split('\n').length
+}
 // ===== 视觉配置 =====
 // Note: Labels are handled via i18n (see severityLabels below).
 // This constant only holds visual properties (emoji, colors).
@@ -173,8 +237,15 @@ const SEVERITY_META: Record<ReviewIssue['severity'], {
   },
 }
 
-/** 审稿报告查看器 */
-export default function ReviewReport({ reportText, draftPath, chapterNumber, chapterDir }: ReviewReportProps) {
+/** 审稿报告查看器：结构化定性审稿产物走专用视图，旧版报告保持原样渲染 */
+export default function ReviewReport(props: ReviewReportProps) {
+  const qualitative = useMemo(() => parseQualitativeReview(props.reportText), [props.reportText])
+  if (qualitative) return <QualitativeReviewReport review={qualitative} {...props} />
+  return <LegacyReviewReport {...props} />
+}
+
+/** 审稿报告查看器（旧版 items/summary 结构） */
+function LegacyReviewReport({ reportText, draftPath, chapterNumber, chapterDir }: ReviewReportProps) {
   const { t } = useTranslation('editors')
   const { issues, summary } = parseReport(reportText, t('reviewReport.generalCheck'))
   const [showRefineDialog, setShowRefineDialog] = useState(false)
@@ -463,6 +534,379 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// ===== 定性审稿视图 =====
+
+/** 观察强度 → 视觉样式（只表示建议的阅读优先级，不是通过/失败判定） */
+const OBSERVATION_SEVERITY_META: Record<ObservationSeverity, {
+  colorClass: string
+  bgClass: string
+  borderClass: string
+}> = {
+  note: {
+    colorClass: 'text-[var(--color-text-muted)]',
+    bgClass: 'bg-[var(--color-bg-elevated)]',
+    borderClass: 'border-[var(--color-border)]',
+  },
+  watch: {
+    colorClass: 'text-yellow-400',
+    bgClass: 'bg-yellow-500/10',
+    borderClass: 'border-yellow-500/30',
+  },
+  concern: {
+    colorClass: 'text-red-400',
+    bgClass: 'bg-red-500/10',
+    borderClass: 'border-red-500/30',
+  },
+}
+
+interface QualitativeViewProps extends ReviewReportProps {
+  review: QualitativeReview
+}
+
+/** 发起修订所需的基础信息 */
+interface RevisionContext {
+  draftBody: string
+  reviewFileName: string
+  chapterTitle: string
+}
+
+/**
+ * 定性审稿视图。
+ *
+ * 只呈现两类内容：
+ *   - 可追溯的创作观察（附原文证据与行号）；
+ *   - 内置检测标出的「可修订位置」。
+ * 不做通过/失败判定，也不自动改稿：是否修订由用户显式选择条目后发起。
+ */
+function QualitativeReviewReport({ review, reportText, draftPath, chapterNumber, chapterDir }: QualitativeViewProps) {
+  const { t } = useTranslation('editors')
+  // 被勾选、准备交给 AI 处理的观察
+  const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const [busy, setBusy] = useState<'deai' | 'revise' | null>(null)
+  // 证据偏移相对「被审正文」，需要读回草稿正文才能换算成行号
+  const [draftContent, setDraftContent] = useState('')
+
+  useEffect(() => {
+    if (!draftPath) return
+    let cancelled = false
+    import('../../stores/draft-store')
+      .then(({ readDraftBody }) => readDraftBody(draftPath))
+      .then((text) => { if (!cancelled) setDraftContent(text || '') })
+      .catch(() => { /* 读取失败只影响行号显示，不影响审稿内容 */ })
+    return () => { cancelled = true }
+  }, [draftPath])
+
+  // 按维度分组，保持固定顺序，便于多轮审稿之间对照
+  const groups = useMemo(() => {
+    const buckets = new Map<ObservationDimension, ReviewObservation[]>(
+      OBSERVATION_DIMENSIONS.map((dimension) => [dimension, [] as ReviewObservation[]])
+    )
+    for (const observation of review.observations) {
+      buckets.get(observation.dimension)?.push(observation)
+    }
+    return OBSERVATION_DIMENSIONS
+      .map((dimension) => ({ dimension, items: buckets.get(dimension) ?? [] }))
+      .filter((group) => group.items.length > 0)
+  }, [review.observations])
+
+  const selectedObservations = review.observations.filter((observation) => selected[observation.id])
+  const canAct = !!(draftPath && chapterDir)
+  const contextTotal = review.context.timelineEvents + review.context.characterStates
+    + review.context.openPlotLines + review.context.knownFacts
+
+  /** 收集发起修订所需的信息（草稿正文 / 章节标题 / 最新审稿文件名） */
+  const resolveRevisionContext = async (targetPath: string, targetDir: string): Promise<RevisionContext | null> => {
+    const { readDraftBody } = await import('../../stores/draft-store')
+    const { getLatestReview, readDraftIndex } = await import('../../services/draft-index')
+    const draftBody = await readDraftBody(targetPath)
+    if (!draftBody) return null
+    const versionMatch = targetPath.match(/draft_v(\d+)\.md$/)
+    const baseVersion = versionMatch ? parseInt(versionMatch[1]) : 1
+    const latestReview = await getLatestReview(targetDir, baseVersion)
+    const index = await readDraftIndex()
+    return {
+      draftBody,
+      reviewFileName: latestReview?.fileName || '',
+      chapterTitle: index.chapterTitle
+        || t('reviewReport.chapterFallback', { chapterNum: chapterNumber || review.chapterNumber }),
+    }
+  }
+
+  /** 显式发起：按选中的观察修稿（审稿本身不会自动触发） */
+  const doReviseSelected = async () => {
+    const targetPath = draftPath
+    const targetDir = chapterDir
+    if (!targetPath || !targetDir || selectedObservations.length === 0) return
+    setBusy('revise')
+    try {
+      const info = await resolveRevisionContext(targetPath, targetDir)
+      if (!info) {
+        toast.error(t('reviewReport.qualitative.noDraft'))
+        return
+      }
+      const { useWorkflowStore } = await import('../../stores/workflow-store')
+      const { createRefineFromReviewWorkflow } = await import('../../services/workflows/chapter-workflow')
+      const { buildRevisionBrief } = await import('../../services/review')
+      useWorkflowStore.getState().startWorkflow(createRefineFromReviewWorkflow({
+        chapterNumber: chapterNumber || review.chapterNumber,
+        chapterTitle: info.chapterTitle,
+        draftPath: targetPath,
+        draftContent: info.draftBody,
+        reviewReport: buildRevisionBrief(selectedObservations, info.draftBody),
+        reviewFileName: info.reviewFileName,
+      }), false)
+    } catch (e) {
+      toast.error(t('reviewReport.qualitative.reviseStartFailed', { error: String(e) }))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** 显式发起：去 AI 味（语义方法由可替换的 Skill 提供，结果只生成待审阅修订） */
+  const doDeai = async () => {
+    const targetPath = draftPath
+    const targetDir = chapterDir
+    if (!targetPath || !targetDir) return
+    setBusy('deai')
+    try {
+      const info = await resolveRevisionContext(targetPath, targetDir)
+      if (!info) {
+        toast.error(t('reviewReport.qualitative.noDraft'))
+        return
+      }
+      const { useWorkflowStore } = await import('../../stores/workflow-store')
+      const { createDeaiReviseWorkflow } = await import('../../services/workflows/chapter-workflow')
+      useWorkflowStore.getState().startWorkflow(createDeaiReviseWorkflow({
+        chapterNumber: chapterNumber || review.chapterNumber,
+        chapterTitle: info.chapterTitle,
+        draftPath: targetPath,
+        draftContent: info.draftBody,
+      }), false)
+    } catch (e) {
+      toast.error(t('reviewReport.qualitative.deaiStartFailed', { error: String(e) }))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-2xl mx-auto px-6 py-4">
+        {/* 标题 + 正文统计 */}
+        <div className="flex items-center gap-3 mb-3 pb-3 border-b border-[var(--color-border)]">
+          <h3 className="text-base font-bold text-[var(--color-text)] flex items-center gap-1.5">
+            <ScanText size={15} className="text-[var(--color-accent)]" />
+            {t('reviewReport.qualitative.title')}
+          </h3>
+          <span className="text-xs ml-auto" style={{ color: 'var(--color-text-muted)' }}>
+            {t('reviewReport.qualitative.statsLine', {
+              characters: review.stats.characters,
+              paragraphs: review.stats.paragraphs,
+              sentences: review.stats.sentences,
+              dialogue: Math.round(review.stats.dialogueRatio * 100),
+            })}
+          </span>
+        </div>
+
+        {/* 本次观察参照的既定事实规模 */}
+        <div className="mb-4 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          {contextTotal > 0
+            ? t('reviewReport.qualitative.contextLine', {
+              timeline: review.context.timelineEvents,
+              characters: review.context.characterStates,
+              plots: review.context.openPlotLines,
+              facts: review.context.knownFacts,
+            })
+            : t('reviewReport.qualitative.contextUnavailable')}
+        </div>
+
+        {/* 审稿观察（按维度分组） */}
+        <section className="mb-6">
+          <h4 className="text-sm font-semibold text-[var(--color-text)] mb-2 flex items-center gap-1.5">
+            <ListChecks size={14} className="text-[var(--color-text-muted)]" />
+            {t('reviewReport.qualitative.observationSection', { count: review.observations.length })}
+          </h4>
+          {groups.length === 0 ? (
+            <div className="text-xs py-2" style={{ color: 'var(--color-text-muted)' }}>
+              {t('reviewReport.qualitative.noObservations')}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {groups.map((group) => (
+                <div key={group.dimension}>
+                  <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                    {t(`commands:review.dimension.${group.dimension}`)} · {group.items.length}
+                  </div>
+                  <div className="space-y-1.5 pl-1">
+                    {group.items.map((observation) => {
+                      const meta = OBSERVATION_SEVERITY_META[observation.severity] ?? OBSERVATION_SEVERITY_META.note
+                      return (
+                        <div
+                          key={observation.id}
+                          className={cn('px-3 py-2 rounded-md border text-xs leading-relaxed', meta.borderClass, meta.bgClass)}
+                        >
+                          <div className="flex items-start gap-2">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 flex-shrink-0"
+                              checked={!!selected[observation.id]}
+                              onChange={(e) => setSelected((prev) => ({ ...prev, [observation.id]: e.target.checked }))}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-[var(--color-text)]">{observation.title}</div>
+                              {observation.detail && (
+                                <div className="mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>{observation.detail}</div>
+                              )}
+                              <div className={cn('mt-1 text-[0.65rem]', meta.colorClass)}>
+                                {t(`commands:review.severity.${observation.severity}`)}
+                                {observation.origin === 'rule' ? ` · ${t('reviewReport.qualitative.originRule')}` : ''}
+                              </div>
+                            </div>
+                          </div>
+                          {observation.evidence.map((evidence, evidenceIndex) => (
+                            <div
+                              key={evidenceIndex}
+                              className="mt-1.5 ml-5 pl-2 text-[0.7rem] italic"
+                              style={{ borderLeft: '2px solid var(--color-border)', color: 'var(--color-text-muted)' }}
+                            >
+                              <Quote size={10} className="inline mr-1 opacity-60" />
+                              {evidence.quote}
+                              <span className="ml-1 not-italic">
+                                {evidence.start > 0
+                                  ? t('reviewReport.qualitative.evidenceLine', { line: lineNumberAt(draftContent, evidence.start) })
+                                  : t('reviewReport.qualitative.evidenceUnlocated')}
+                              </span>
+                            </div>
+                          ))}
+                          {observation.suggestion && (
+                            <div className="mt-1.5 ml-5 text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+                              {t('reviewReport.qualitative.suggestion')} {observation.suggestion}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* AI 痕迹：只标记可修订位置；改写由下面的按钮显式发起 */}
+        <section className="mb-6">
+          <h4 className="text-sm font-semibold text-[var(--color-text)] mb-2 flex items-center gap-1.5">
+            <Sparkles size={14} className="text-[var(--color-text-muted)]" />
+            {t('reviewReport.qualitative.aiTraceSection', { count: review.aiTraces.length })}
+          </h4>
+          {review.aiTraces.length === 0 ? (
+            <div className="text-xs py-2" style={{ color: 'var(--color-text-muted)' }}>
+              {t('reviewReport.qualitative.noAiTraces')}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {review.aiTraces.map((finding) => (
+                <div
+                  key={finding.id}
+                  className="px-3 py-2 rounded-md border border-[var(--color-border)] text-xs leading-relaxed"
+                  style={{ backgroundColor: 'var(--color-bg-elevated)' }}
+                >
+                  <div className="flex items-start gap-2">
+                    <span
+                      className="px-1.5 py-0.5 rounded text-[0.65rem] flex-shrink-0"
+                      style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-secondary)' }}
+                    >
+                      {t(`commands:review.aiTrace.kind.${finding.kind}`)}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div style={{ color: 'var(--color-text-secondary)' }}>{finding.message}</div>
+                      {finding.metric && (
+                        <div className="mt-0.5 text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+                          {t('reviewReport.qualitative.metricLine', {
+                            label: t(`commands:review.aiTrace.metric.${finding.metric.label}`),
+                            value: finding.metric.value,
+                            threshold: finding.metric.threshold,
+                          })}
+                        </div>
+                      )}
+                      {finding.hint && (
+                        <div className="mt-0.5 text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>{finding.hint}</div>
+                      )}
+                    </div>
+                  </div>
+                  {finding.quote && (
+                    <div
+                      className="mt-1.5 ml-5 pl-2 text-[0.7rem] italic"
+                      style={{ borderLeft: '2px solid var(--color-border)', color: 'var(--color-text-muted)' }}
+                    >
+                      <Quote size={10} className="inline mr-1 opacity-60" />
+                      {finding.quote}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {canAct && review.aiTraces.length > 0 && (
+            <div className="mt-3 flex flex-col items-start gap-2">
+              <Button variant="ai" size="sm" onClick={doDeai} disabled={busy !== null}>
+                {busy === 'deai'
+                  ? <LoaderCircle size={13} className="mr-1 animate-spin" />
+                  : <WandSparkles size={13} className="mr-1" />}
+                {t('reviewReport.qualitative.deai')}
+              </Button>
+              <p className="text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+                {t('reviewReport.qualitative.deaiDescription')}
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* 显式发起修订：只处理被勾选的观察 */}
+        {canAct && review.observations.length > 0 && (
+          <div className="mb-4 flex items-center gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelected(Object.fromEntries(review.observations.map((observation) => [observation.id, true])))}
+            >
+              {t('reviewReport.qualitative.selectAll')}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setSelected({})}>
+              {t('reviewReport.qualitative.selectNone')}
+            </Button>
+            <Button
+              variant="ai"
+              size="sm"
+              onClick={doReviseSelected}
+              disabled={busy !== null || selectedObservations.length === 0}
+            >
+              {busy === 'revise'
+                ? <LoaderCircle size={13} className="mr-1 animate-spin" />
+                : <Sparkles size={13} className="mr-1" />}
+              {t('reviewReport.qualitative.reviseSelected', { count: selectedObservations.length })}
+            </Button>
+          </div>
+        )}
+
+        <p className="text-[0.7rem] mb-4" style={{ color: 'var(--color-text-muted)' }}>
+          {t('reviewReport.qualitative.notVerdict')}
+        </p>
+
+        {/* 原始文本折叠 */}
+        <details>
+          <summary className="text-xs cursor-pointer hover:text-[var(--color-text)]" style={{ color: 'var(--color-text-muted)' }}>
+            {t('reviewReport.viewRawText')}
+          </summary>
+          <pre className="mt-2 text-xs whitespace-pre-wrap font-mono leading-5 text-[var(--color-text-secondary)] bg-[var(--color-sidebar)] rounded-md p-3 border border-[var(--color-border)]">
+            {reportText}
+          </pre>
+        </details>
+      </div>
     </div>
   )
 }

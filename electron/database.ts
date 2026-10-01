@@ -227,7 +227,7 @@ function createTables(db: BetterSqlite3.Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       base_draft_id INTEGER NOT NULL,             -- 父草稿 FK
       revision_index INTEGER NOT NULL,            -- r1, r2
-      revision_type TEXT NOT NULL,                -- refine | review-fix
+      revision_type TEXT NOT NULL,                -- refine | review-fix | deai
       status TEXT DEFAULT 'pending',              -- pending/merged/discarded
       merged_to_draft_id INTEGER,                 -- 合并产出的新 draft
       user_prompt TEXT DEFAULT '',                -- 用户指导

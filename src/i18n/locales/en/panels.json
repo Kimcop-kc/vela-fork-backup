@@ -167,6 +167,18 @@
         "name": "Writing Coach",
         "desc": "Professional writing technique guidance and prose improvement suggestions.",
         "when": "When the user wants to improve writing skills or learn writing techniques"
+      },
+      "deaiTone": {
+        "name": "De-AI tone",
+        "desc": "Provides semantic rewriting methods for removing \"AI tone\": decide whether and how to change, instead of applying a replacement word list.",
+        "when": "When the user wants to remove AI writing traces (must be invoked explicitly)",
+        "args": "Passage or positions to handle (optional)"
+      },
+      "styleImitation": {
+        "name": "Style imitation",
+        "desc": "Compiles reference text into an evidence-backed, executable style guide for imitating a specific author.",
+        "when": "When the user wants to imitate a book or author's style",
+        "args": "Reference text or source description (optional)"
       }
     },
     "tools": {

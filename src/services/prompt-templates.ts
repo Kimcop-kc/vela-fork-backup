@@ -73,6 +73,9 @@ export const EDITABLE_PROMPT_KEYS: string[] = [
   'consistency_check',
   'analyze_writing_style',
   'refine_from_review',
+  'qualitative_review',
+  'style_imitation',
+  'deai_revise',
 ]
 
 /** 全部内置 Prompt 模板 */
@@ -2678,6 +2681,362 @@ Requirements:
     systemRoleLocalized: {
       en: 'You are a top-tier web novel editor and seasoned literary analyst, skilled at reverse-engineering setting systems from existing works.',
       ru: 'Вы — ведущий редактор веб-романов и опытный литературный аналитик, искусно выполняющий обратное проектирование систем настроек из существующих произведений.'
+    },
+  },
+
+  // ================================================================
+  // 定性审稿（连续性观察）
+  // ================================================================
+  {
+    key: 'qualitative_review',
+    name: '定性审稿',
+    description: '对章节做连续性观察，输出可追溯的 observation（不做通过/失败判定）',
+    systemRole: '你是一位资深小说编辑，擅长把「读起来不对劲的地方」说清楚：给出原文证据、说明影响，而不是给出通过或失败的判定。',
+    variables: {
+      chapter_info: '本章信息（章节号 / 标题 / 蓝图目标）',
+      canon_context: '既定事实（时间线 / 角色状态 / 未回收伏笔 / 已知事实）',
+      chapter_content: '待审章节正文',
+      review_focus: '本次审稿的侧重点（可为空）',
+    },
+    content: `请阅读以下章节，按六个维度记录你的观察。
+
+【本章信息】
+{{chapter_info}}
+
+【既定事实（Canon）】
+{{canon_context}}
+
+【待审正文】
+{{chapter_content}}
+
+【本次侧重点（如有，请优先关注）】
+{{review_focus}}
+
+【六个观察维度】
+1. character-memory 角色记忆：角色是否知道了不该知道的事，或忘记了已经知道的事
+2. prop-continuity 物资连续性：道具、钱财、装备、伤势是否凭空出现或消失
+3. foreshadowing 伏笔回收：已埋的伏笔是否被遗忘，回收是否自然
+4. outline-deviation 大纲偏离：本章是否完成蓝图规定的目标，有无跑偏
+5. pacing 叙事节奏：信息密度、场景切换、张弛是否失衡
+6. emotional-arc 情感弧线：情绪变化是否有铺垫与递进
+
+【硬性要求】
+- 只记录你**能在正文里找到原文证据**的观察；每条观察必须附至少一条原文引文（逐字照抄，不要改写、不要省略号省略）。
+- 不要给章节打分，不要输出「通过 / 失败 / 合格」这类判定，也不要重写正文。
+- severity 只能是 note（记录）/ watch（值得留意）/ concern（可能影响读者理解），它表示阅读优先级，不是判定。
+- 没问题的维度不要为了凑数编造观察。
+- 观察要具体：说清楚「哪里、怎么了、为什么值得注意」，不要写「人物塑造略显单薄」这类空话。
+
+【输出格式】
+只输出 JSON，不要输出任何解释：
+{
+  "observations": [
+    {
+      "dimension": "character-memory",
+      "severity": "watch",
+      "title": "一句话标题",
+      "detail": "具体描述：观察到什么，为什么值得注意",
+      "evidence": [{ "quote": "正文原文，逐字照抄", "source": "第12章" }],
+      "suggestion": "可以怎么改（可选，写成建议而不是命令）",
+      "relatedChapters": [12]
+    }
+  ]
+}`,
+    contentLocalized: {
+      en: `Read the following chapter and record your observations across six dimensions.
+
+【Chapter Info】
+{{chapter_info}}
+
+【Established Facts (Canon)】
+{{canon_context}}
+
+【Chapter Text Under Review】
+{{chapter_content}}
+
+【Focus For This Pass (if any)】
+{{review_focus}}
+
+【Six Observation Dimensions】
+1. character-memory: does a character know something they should not, or forget something they already knew
+2. prop-continuity: do props, money, equipment, or injuries appear or vanish out of nowhere
+3. foreshadowing: are planted setups forgotten, and are payoffs natural
+4. outline-deviation: does this chapter achieve its blueprint goal, or drift away from it
+5. pacing: are information density, scene transitions, and tension balanced
+6. emotional-arc: are emotional shifts prepared and progressive
+
+【Hard Requirements】
+- Only record observations you can support with **verbatim evidence from the chapter**. Every observation needs at least one exact quote (copy it character by character, do not paraphrase or use ellipses).
+- Do not grade the chapter. Do not output pass/fail/qualified verdicts. Do not rewrite the chapter.
+- severity may only be note / watch / concern. It expresses reading priority, not a verdict.
+- If a dimension has no issue, do not invent an observation for it.
+- Be specific: say what, where, and why it matters. Avoid empty remarks like "the characterization feels thin".
+
+【Output Format】
+Output JSON only, with no explanation:
+{
+  "observations": [
+    {
+      "dimension": "character-memory",
+      "severity": "watch",
+      "title": "One-line title",
+      "detail": "What you observed and why it matters",
+      "evidence": [{ "quote": "exact text from the chapter", "source": "Chapter 12" }],
+      "suggestion": "How it could be changed (optional, phrased as a suggestion)",
+      "relatedChapters": [12]
+    }
+  ]
+}`,
+      ru: `Прочитайте следующую главу и запишите наблюдения по шести измерениям.
+
+【Информация о главе】
+{{chapter_info}}
+
+【Установленные факты (Canon)】
+{{canon_context}}
+
+【Текст главы на рецензию】
+{{chapter_content}}
+
+【Акцент этого прохода (если есть)】
+{{review_focus}}
+
+【Шесть измерений наблюдения】
+1. character-memory: не знает ли персонаж то, чего знать не должен, или не забыл ли то, что уже знал
+2. prop-continuity: не появляются и не исчезают ли предметы, деньги, снаряжение, травмы из ниоткуда
+3. foreshadowing: не забыты ли заложенные завязки, естественна ли их отдача
+4. outline-deviation: достигнута ли цель главы по конспекту, нет ли ухода в сторону
+5. pacing: сбалансированы ли плотность информации, переходы между сценами и напряжение
+6. emotional-arc: подготовлены ли эмоциональные сдвиги и есть ли развитие
+
+【Жёсткие требования】
+- Записывайте только те наблюдения, которые можно подтвердить **дословной цитатой из главы**. На каждое наблюдение нужна минимум одна точная цитата (копируйте знак в знак, без пересказа и многоточий).
+- Не оценивайте главу баллами. Не выводите вердикты «прошло / не прошло / зачёт». Не переписывайте главу.
+- severity может быть только note / watch / concern. Это приоритет чтения, а не вердикт.
+- Если в измерении нет проблемы, не придумывайте наблюдение.
+- Будьте конкретны: что, где и почему это важно. Избегайте пустых формулировок.
+
+【Формат вывода】
+Только JSON, без пояснений:
+{
+  "observations": [
+    {
+      "dimension": "character-memory",
+      "severity": "watch",
+      "title": "Заголовок в одну строку",
+      "detail": "Что замечено и почему это важно",
+      "evidence": [{ "quote": "дословный фрагмент текста", "source": "Глава 12" }],
+      "suggestion": "Как можно изменить (необязательно, в форме предложения)",
+      "relatedChapters": [12]
+    }
+  ]
+}`,
+    },
+    systemRoleLocalized: {
+      en: 'You are a seasoned fiction editor, skilled at articulating what feels off in a chapter: you cite textual evidence and explain the impact instead of issuing a pass/fail verdict.',
+      ru: 'Вы — опытный редактор художественной литературы, умеющий точно объяснить, что «не так» в главе: вы приводите текстовые доказательства и объясняете влияние вместо вынесения вердикта «прошло / не прошло».'
+    },
+  },
+
+  // ================================================================
+  // 文风仿写：把参考文本编译成有证据的可执行文风指南
+  // ================================================================
+  {
+    key: 'style_imitation',
+    name: '文风仿写编译',
+    description: '按激活的仿写 Skill，把参考文本编译为有证据的可执行文风指南',
+    systemRole: '你是一位文学风格分析专家，擅长把「感觉」拆解成可复现、可执行的写作指令。',
+    variables: {
+      skill_method: '被激活的仿写 Skill 提供的分析方法',
+      style_metrics: '参考文本的量化特征（本地确定性统计结果）',
+      reference_text: '参考文本（待仿写的作者正文）',
+    },
+    content: `请阅读参考文本，把它编译成一份「有证据、可执行」的文风指南。
+
+【分析方法（由被激活的 Skill 提供，请严格按它执行）】
+{{skill_method}}
+
+【参考文本的量化特征（本地统计，客观依据）】
+{{style_metrics}}
+
+【参考文本】
+{{reference_text}}
+
+【硬性要求】
+- 归纳作者**稳定重复**的写法，不要复述剧情，不要评价作品好坏。
+- 每条结论必须附 1-3 条原文引文作为证据，且引文必须**逐字照抄**（不要改写、不要用省略号省略）。找不到证据的结论一律不要写。
+- 结论要写成**可执行的写作指令**（祈使句），例如「多用短句断句，单句控制在 12 字以内」；不要写「文笔细腻」这类无法执行的空话。
+- 量化特征只是佐证，不要直接把它抄成结论；要结合原文解释它意味着什么。
+- 不要输出与上述量化特征明显矛盾的结论。
+
+【输出格式】
+只输出 JSON，不要输出任何解释：
+{
+  "rules": [
+    {
+      "category": "syntax",
+      "statement": "可执行的写作指令（祈使句）",
+      "evidence": [{ "quote": "参考文本原文，逐字照抄" }],
+      "confidence": "high"
+    }
+  ]
+}
+
+category 只能取以下之一：
+voice（叙述视角与人称）、syntax（句式与句长）、rhythm（段落与节奏）、
+dialogue（对话与叙述配比）、lexicon（用词倾向）、imagery（意象与修辞）、punctuation（标点习惯）`,
+    contentLocalized: {
+      en: `Read the reference text and compile it into an evidence-backed, executable style guide.
+
+【Analysis Method (provided by the active Skill — follow it strictly)】
+{{skill_method}}
+
+【Quantitative Profile Of The Reference Text (local measurement, objective basis)】
+{{style_metrics}}
+
+【Reference Text】
+{{reference_text}}
+
+【Hard Requirements】
+- Summarize the author's **consistently repeated** techniques. Do not retell the plot and do not judge the work.
+- Every conclusion must cite 1-3 exact quotes from the reference text, copied character by character (no paraphrase, no ellipses). If you cannot find evidence, omit the conclusion entirely.
+- Write each conclusion as an **executable writing directive** (imperative form), e.g. "Prefer short sentences, keeping most under 12 characters". Avoid unactionable remarks such as "graceful prose".
+- The quantitative profile is supporting evidence, not a conclusion to copy. Explain what it means in terms of the actual text.
+- Do not output conclusions that clearly contradict the quantitative profile above.
+
+【Output Format】
+Output JSON only, with no explanation:
+{
+  "rules": [
+    {
+      "category": "syntax",
+      "statement": "executable writing directive (imperative)",
+      "evidence": [{ "quote": "exact text from the reference" }],
+      "confidence": "high"
+    }
+  ]
+}
+
+category must be one of:
+voice, syntax, rhythm, dialogue, lexicon, imagery, punctuation`,
+      ru: `Прочитайте референсный текст и скомпилируйте из него стилевое руководство с доказательствами и исполнимыми правилами.
+
+【Метод анализа (предоставлен активным Skill — следуйте ему строго)】
+{{skill_method}}
+
+【Количественный профиль референсного текста (локальные измерения, объективная основа)】
+{{style_metrics}}
+
+【Референсный текст】
+{{reference_text}}
+
+【Жёсткие требования】
+- Обобщайте **устойчиво повторяющиеся** приёмы автора. Не пересказывайте сюжет и не оценивайте произведение.
+- Каждый вывод должен сопровождаться 1–3 точными цитатами из референсного текста, скопированными знак в знак (без пересказа и многоточий). Если доказательств нет, вывод не приводите.
+- Формулируйте вывод как **исполнимую писательскую директиву** (повелительное наклонение), например «Предпочитайте короткие фразы, в основном до 12 знаков». Избегайте формулировок вроде «изящный слог».
+- Количественный профиль — это подтверждение, а не готовый вывод. Объясните, что он означает применительно к тексту.
+- Не выводите выводы, явно противоречащие количественному профилю.
+
+【Формат вывода】
+Только JSON, без пояснений:
+{
+  "rules": [
+    {
+      "category": "syntax",
+      "statement": "исполнимая писательская директива",
+      "evidence": [{ "quote": "дословный фрагмент референса" }],
+      "confidence": "high"
+    }
+  ]
+}
+
+category принимает одно из значений:
+voice, syntax, rhythm, dialogue, lexicon, imagery, punctuation`,
+    },
+    systemRoleLocalized: {
+      en: 'You are a literary style analyst, skilled at breaking "feel" down into reproducible, executable writing directives.',
+      ru: 'Вы — аналитик литературного стиля, умеющий разложить «ощущение» на воспроизводимые исполнимые писательские директивы.'
+    },
+  },
+
+  // ================================================================
+  // 去 AI 味修订（仅在用户显式发起时运行）
+  // ================================================================
+  {
+    key: 'deai_revise',
+    name: '去 AI 味修订',
+    description: '按激活的去 AI 味 Skill，针对被标记的位置做语义改写（仅在用户显式发起时运行）',
+    systemRole: '你是一位资深小说编辑，擅长把「读起来像机器写的」段落改回有人的语感与体温。',
+    variables: {
+      skill_method: '被激活的去 AI 味 Skill 提供的语义改写方法',
+      trace_brief: '被标记的可修订位置（含原文与量化指标）',
+      draft_content: '待修订的章节正文',
+    },
+    content: `请修订以下章节，消除被标记位置上的「AI 痕迹」。
+
+【改写方法（由被激活的 Skill 提供，请严格按它执行）】
+{{skill_method}}
+
+【被标记的可修订位置（本地检测结果，仅供参考，不是必须全改）】
+{{trace_brief}}
+
+【待修订正文】
+{{draft_content}}
+
+【硬性要求】
+- 只做**语义层面的改写**：调整用词、句式、句长节奏、叙述方式。不要引入任何新情节。
+- 严禁改动：人物名、地名、专有名词、时间线、已发生的事件、对话传达的信息、伏笔与钩子。
+- 不要机械替换词表里的词。同一个词在不同语境下要区别处理；有的位置本来就自然，就保持原样。
+- 保留原有的段落划分与空行格式，保留中文双引号，不要输出 Markdown 语法符号。
+- 修订后的字数应与原文接近（±10% 以内）。
+
+【输出格式】
+直接输出修订后的完整正文，不要输出任何说明、对比或 JSON。`,
+    contentLocalized: {
+      en: `Revise the following chapter to remove the "AI traces" flagged in the marked positions.
+
+【Rewriting Method (provided by the active Skill — follow it strictly)】
+{{skill_method}}
+
+【Flagged Revisable Positions (local detection; reference only, not all must change)】
+{{trace_brief}}
+
+【Draft To Revise】
+{{draft_content}}
+
+【Hard Requirements】
+- Rewrite only at the **semantic level**: word choice, sentence structure, sentence-length rhythm, narration style. Introduce no new plot.
+- Never change: character names, place names, proper nouns, the timeline, events that already happened, information conveyed by dialogue, setups and hooks.
+- Do not mechanically swap words from a list. The same word may need different treatment in different contexts; keep positions that already read naturally as they are.
+- Preserve the existing paragraph breaks and blank lines, keep standard Chinese double quotes, and output no Markdown syntax.
+- Keep the length close to the original (within ±10%).
+
+【Output Format】
+Output the complete revised chapter as plain text only. No commentary, no diff, no JSON.`,
+      ru: `Отредактируйте следующую главу, устранив «следы ИИ» в отмеченных местах.
+
+【Метод переработки (предоставлен активным Skill — следуйте ему строго)】
+{{skill_method}}
+
+【Отмеченные места для правки (локальное обнаружение; только ориентир, менять все не обязательно)】
+{{trace_brief}}
+
+【Черновик для правки】
+{{draft_content}}
+
+【Жёсткие требования】
+- Правьте только на **смысловом уровне**: выбор слов, структура фраз, ритм длины предложений, манера повествования. Не вводите новый сюжет.
+- Никогда не меняйте: имена персонажей, топонимы, имена собственные, хронологию, уже произошедшие события, информацию в диалогах, завязки и крючки.
+- Не заменяйте слова механически по списку. Одно и то же слово в разных контекстах требует разного подхода; естественно звучащие места оставляйте как есть.
+- Сохраните разбивку на абзацы и пустые строки, оставьте стандартные китайские кавычки, не выводите разметку Markdown.
+- Держите объём близким к исходному (в пределах ±10%).
+
+【Формат вывода】
+Выведите только полный отредактированный текст главы. Без пояснений, сравнений и JSON.`,
+    },
+    systemRoleLocalized: {
+      en: 'You are a seasoned fiction editor, skilled at turning paragraphs that read like machine output back into prose with a human pulse.',
+      ru: 'Вы — опытный редактор художественной литературы, умеющий вернуть абзацам, звучащим как машинный текст, человеческий пульс.'
     },
   },
 ]

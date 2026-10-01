@@ -176,7 +176,9 @@
     "finalizedSaved": "✅ Finalized content written to SQLite database and synced as root directory file (Ch.{{chapter}}{{title}}.txt)",
     "launchingPostProcess": "🚀 Launching background model inference system to update global state...",
     "chapterComplete": "🎉 Chapter {{chapter}} full creation pipeline complete!",
-    "chapterGoalPrefix": "Finalize chapter {{chapter}}"
+    "chapterGoalPrefix": "Finalize chapter {{chapter}}",
+    "notesSegmentHint": "This is segment {{index}}/{{total}} of the chapter: extract only the plot beats, character changes, new settings and hooks that appear in this segment, and do not repeat conclusions from other segments.",
+    "cardsSegmentHint": "This is segment {{index}}/{{total}} of the chapter: output only characters whose state actually changes in this segment; skip characters that are absent or unchanged."
   },
   "importNovel": {
     "importingChapters": "📖 Starting finalization import of {{count}} chapters to database...",
@@ -197,7 +199,14 @@
     "parsingResult": "📝 Parsing AI results and writing to project...",
     "configUpdated": "✅ Novel configuration updated",
     "architecturePersisted": "✅ Four-part story architecture persisted to database",
-    "cardsGenerated": "✅ Generated {{count}} character cards",
+      "cardsGenerated": "✅ Generated {{count}} character cards",
+      "firstChapterLabel": "Chapter 1 text (opening style reference)",
+      "latestChapterLabel": "Latest chapter text (current progress reference)",
+      "inferChunkUnparsable": "the model response could not be parsed as JSON",
+      "inferFailed": "Segmented inference produced no usable result. Check the default model configuration, or import fewer chapters and retry.",
+      "configSegmentHint": "This segment contains only one part of the whole-book sample: infer only the fields this part can support, leave the rest empty or mark them as pending, and do not fabricate.",
+      "blueprintSegmentHint": "This is segment {{index}}/{{total}} of the chapter: extract only the key events and the hook of this segment, and do not invent content from other segments.",
+      "blueprintMergeDirective": "\n\n[Merge requirement] The text above contains excerpts from different segments of the same chapter (the numbering only indicates order). Merge them into one complete chapter blueprint, output the same JSON fields as required, keep keyEvents within 100-150 words, and never mention the segmentation in the result.",
     "noChapterData": "No chapter data",
     "singleChapterTemplateNotFound": "Single chapter blueprint inference prompt template not found",
     "inferringBlueprints": "📋 Starting per-chapter blueprint inference ({{count}} chapters, concurrency limit {{limit}})...",
@@ -253,7 +262,8 @@
     "charExtractingCards": "🔍 Calling AI to extract character cards...",
     "charExtractSystemRole": "You are a professional novel data structuring expert.",
     "charExtractDone": "✅ Character card extraction complete ({{count}} characters total)",
-    "charExtractError": "AI returned incorrect character data format, no valid characters extracted. Raw content preview: {{preview}}",
+      "charExtractError": "AI returned incorrect character data format, no valid characters extracted. Raw content preview: {{preview}}",
+      "charExtractSegmentHint": "This is segment {{index}}/{{total}} of the character map: extract only the characters explicitly present in this segment, treat this segment as authoritative for them, and do not invent characters that are absent.",
     "charExtractFailed": "Unable to extract character cards",
     "charExtractSaveFailed": "Failed to save character cards",
     "charRepairTitle": "🔧 Repair: Character Card Extraction",
@@ -330,7 +340,19 @@
     "povThirdOmniscient": "Third Person Omniscient",
     "povMultiPov": "Multiple POV",
     "sourceLabelArchCharacters": "Architecture - Character Map",
-    "chapterTitleFallback": "Ch.{{chapter}}"
+    "chapterTitleFallback": "Ch.{{chapter}}",
+    "qualitativeReviewTitle": "Ch. {{chapter}} · Qualitative review",
+    "qualitativeReviewStepName": "Qualitative observation and AI trace detection",
+    "qualitativeReviewStepDesc": "Record traceable creative observations and mark revisable AI traces",
+    "qualitativeReviewCompleted": "Chapter {{chapter}} qualitative review finished",
+    "deaiTitle": "Ch. {{chapter}} · De-AI revision",
+    "deaiStepName": "Rewrite per the de-AI Skill",
+    "deaiStepDesc": "Handle only the marked positions and produce a revision for review",
+    "deaiCompleted": "Chapter {{chapter}} de-AI revision generated",
+    "styleGuideTitle": "Compile style guide",
+    "styleGuideStepName": "Compile the style guide",
+    "styleGuideStepDesc": "Compile the reference text into an evidence-backed, executable style guide via the active imitation Skill",
+    "styleGuideCompleted": "Style guide compiled"
   },
   "pipeline": {
     "retryFailed": "  ⚠️ {{label}} failed on attempt {{attempt}}, retrying... ({{error}})",
@@ -368,6 +390,150 @@
     "finalizeGateRepaired": "  [Gate] REPAIRED ({{attempts}} attempts)",
     "finalizeGateError": "  [Gate] error: {{error}}",
     "reviewResultFormat": "Review report: Ch.{{chapter}}",
-    "refineUserPrompt": "★【User extra refinement guidance (absolute priority)】★:\n{{prompt}}"
+      "refineUserPrompt": "★【User extra refinement guidance (absolute priority)】★:\n{{prompt}}"
+    },
+    "segmented": {
+      "segmentHeader": "[Segmented generation] This run covers segment {{index}}/{{total}} only.",
+      "segmentBody": "Do not invent anything outside this segment: base the output solely on the text below and never fabricate details that are not present.",
+      "segmentHint": "Extra instruction for this segment: {{hint}}",
+      "resumeHeader": "Output chapter {{from}} through chapter {{to}} only.",
+      "resumeBody": "Blueprints up to chapter {{doneChapter}} are already generated. Do not repeat them, do not explain, and return only the JSON for the remaining chapters.",
+      "truncatedHeader": "The previous output was cut off; chapters {{from}}–{{to}} are still incomplete.",
+      "truncatedTailLabel": "[Tail of the previous output (context only, do not repeat)]",
+      "characterFilter": "Only analyze the following characters this run: {{names}}. Do not include any other character in the result.",
+      "shrinkLog": "⚠️ Chapters {{from}}–{{to}} came back incomplete; retrying with a smaller range…",
+      "chunkLog": "Segmented generation: segment {{index}}/{{total}}…",
+      "chunkDoneLog": "Segmented generation finished: {{total}} segments merged into one result.",
+      "chunkFallbackLog": "Segment {{index}} failed; kept the other {{done}} segments: {{error}}"
+    },
+  "review": {
+    "chapterSource": "Chapter {{chapter}}",
+    "dimension": {
+      "character-memory": "Character memory",
+      "prop-continuity": "Prop continuity",
+      "foreshadowing": "Foreshadowing payoff",
+      "outline-deviation": "Outline deviation",
+      "pacing": "Narrative pacing",
+      "emotional-arc": "Emotional arc"
+    },
+    "severity": {
+      "note": "Note",
+      "watch": "Worth watching",
+      "concern": "Prioritize review"
+    },
+    "rule": {
+      "unregisteredSpeaker": {
+        "title": "Unregistered speaker \"{{name}}\" has dialogue",
+        "detail": "\"{{name}}\" is tagged as speaking {{count}} times in this chapter, but is not on any character card.",
+        "suggestion": "Confirm whether this is a new character; if so, add a card so later state tracking does not miss them."
+      }
+    },
+    "brief": {
+      "header": "Observations explicitly selected for revision ({{count}}):",
+      "evidence": "Text: \"{{quote}}\"",
+      "evidenceUnlocated": "Text (could not be auto-located; find it manually): \"{{quote}}\"",
+      "suggestion": "Suggestion: {{suggestion}}",
+      "footer": "Handle only the observations listed above. Do not rewrite anything else, and keep the plot, character names, and timeline unchanged."
+    },
+    "aiTrace": {
+      "kind": {
+        "high-frequency-word": "Repeated wording",
+        "monotonous-sentence": "Monotonous sentence patterns",
+        "over-summary": "Over-summarizing"
+      },
+      "metric": {
+        "perKiloChars": "occurrences per 1000 characters",
+        "lengthVariation": "sentence-length variation",
+        "consecutiveSameStart": "consecutive sentences with the same opening",
+        "cueHits": "summary-cue hits",
+        "abstractNouns": "abstract nouns"
+      },
+      "highFrequency": "\"{{word}}\" appears {{count}} times, about {{density}} per 1000 characters",
+      "highFrequencyHint": "Let this expression appear only where it is truly necessary, and use concrete actions, details, or different wording elsewhere.",
+      "monotonousLength": "{{count}} consecutive sentences have similar length (variation {{variation}})",
+      "monotonousLengthHint": "Vary sentence length: split one or two of them, or merge adjacent short ones.",
+      "monotonousHead": "{{count}} consecutive sentences open with \"{{head}}\"",
+      "monotonousHeadHint": "Change the repeated opening or reorder the sentence so entries vary.",
+      "overSummary": "The closing sentence of paragraph {{paragraph}} reads like a summary (matched \"{{cue}}\")",
+      "overSummaryHint": "Consider cutting the summary and letting the event end on its own, or turning it into a concrete action or image.",
+      "metricLine": "Metric: {{label}} = {{value}} (threshold {{threshold}})",
+      "briefHeader": "AI traces explicitly selected for revision ({{count}}):",
+      "briefFooter": "Apply the method above at the semantic level. Do not swap words mechanically, and leave passages that already read naturally untouched."
+    },
+    "report": {
+      "title": "# Chapter {{chapter}} qualitative review: {{title}}",
+      "summary": "{{characters}} characters, {{paragraphs}} paragraphs, {{sentences}} sentences, dialogue about {{dialogue}}%.",
+      "evidenceLocated": "Text (line {{line}}): \"{{quote}}\"",
+      "aiTraceSection": "AI traces (revisable positions)",
+      "noVerdictNote": "> The above is creative feedback, not a pass/fail verdict. You decide whether to revise; if you do, explicitly select the items to handle."
+    }
+  },
+  "qualitativeReview": {
+    "chapterGoal": "Qualitative review of chapter {{chapter}}",
+    "canonInjected": "Established-facts baseline injected: {{timeline}} timeline events / {{characters}} character states / {{plots}} open plot lines",
+    "canonFailed": "⚠️ Could not read the established-facts baseline, so this pass has nothing to compare against: {{error}}",
+    "templateMissing": "Missing the qualitative_review prompt template",
+    "chapterInfo": "Chapter {{chapter}} — {{title}}",
+    "noCanon": "(No established-facts baseline available; judge from the chapter text alone)",
+    "callingModel": "Recording observations: segment {{index}}/{{total}}…",
+    "segmentFailed": "⚠️ Segment {{index}} failed; skipped, local detection results kept: {{error}}",
+    "localOnly": "⚠️ Model observations unavailable; outputting local deterministic detection only (AI traces and rule-based observations).",
+    "found": "Done: {{observations}} observations, {{traces}} AI trace marks.",
+    "saved": "Review record archived (revision {{index}}).",
+    "saveFailed": "⚠️ Failed to archive the review record: {{error}}",
+    "segmentHint": "This is segment {{index}}/{{total}} of the chapter. Record observations only within this segment; do not speculate about the others."
+  },
+  "styleGuide": {
+    "emptyReference": "Please provide the reference text first",
+    "referenceTooShort": "The reference text needs at least 200 characters to yield a stable style",
+    "skillBuiltin": "Using the analysis method from the built-in imitation Skill \"{{skill}}\"",
+    "skillOverridden": "Found a custom imitation Skill \"{{skill}}\"; compiling with your method",
+    "skillFallback": "No imitation Skill found; using the built-in fallback method",
+    "chunkFailed": "⚠️ Segment {{index}} failed; other segments and all quantitative rules were kept: {{error}}",
+    "compiled": "Compiled: {{rules}} rules, {{evidence}} pieces of evidence, covering {{categories}} categories.",
+    "partialCompile": "⚠️ {{failed}}/{{total}} segments failed; this guide leans on quantitative rules.",
+    "applied": "The style guide has been written into the project writing style.",
+    "notApplied": "The style guide was generated but not written into the project (apply it explicitly if needed).",
+    "templateMissing": "Missing the style_imitation prompt template",
+    "segmentHint": "This is segment {{index}}/{{total}} of the reference. Summarize only this segment; do not speculate about the others.",
+    "defaultSystemRole": "You are a literary style analyst.",
+    "category": {
+      "voice": "Narrative voice",
+      "syntax": "Syntax & sentence length",
+      "rhythm": "Paragraphs & rhythm",
+      "dialogue": "Dialogue vs. narration",
+      "lexicon": "Word choice",
+      "imagery": "Imagery & rhetoric",
+      "punctuation": "Punctuation habits"
+    },
+    "rule": {
+      "averageSentence": "Baseline sentence length is {{length}} characters; keep most sentences between {{low}} and {{high}}.",
+      "variedSentences": "Alternate long and short sentences; avoid several sentences of similar length in a row.",
+      "evenSentences": "Keep a fairly even rhythm of short sentences instead of stacking long ones.",
+      "dialogueRatio": "Dialogue takes about {{percent}}% of the text; keep that balance between dialogue and narration.",
+      "signatureExpressions": "Reuse the author's signature expressions: {{expressions}} (only where the context fits — do not pile them up).",
+      "punctuationHabit": "Punctuation habit: {{mark}} appears about {{perKilo}} times per 1000 characters; keep a similar density.",
+      "paragraphLength": "Paragraphs run about {{length}} characters ({{low}}–{{high}})."
+    },
+    "render": {
+      "title": "# Style guide (reference: {{title}})",
+      "metrics": "Reference text: {{characters}} characters / {{sentences}} sentences / {{paragraphs}} paragraphs; average sentence {{sentenceLength}} characters, average paragraph {{paragraphLength}} characters, dialogue about {{dialogue}}%, lexical diversity {{diversity}}.",
+      "evidence": "Evidence: \"{{quote}}\"",
+      "footer": "> Compiled by the imitation Skill \"{{skill}}\"; every rule cites evidence from the reference text."
+    }
+  },
+  "deai": {
+    "noFindings": "Local detection found no AI traces to address; nothing was changed.",
+    "marked": "Marked {{count}} revisable positions.",
+    "skillBuiltin": "Using the semantic rewriting method from the built-in de-AI Skill \"{{skill}}\"",
+    "skillOverridden": "Found a custom de-AI Skill \"{{skill}}\"; rewriting with your method",
+    "skillFallback": "No de-AI Skill found; using the built-in fallback method",
+    "templateMissing": "Missing the deai_revise prompt template",
+    "chunkLog": "Rewriting segment {{index}}/{{total}} ({{marks}} marks in this segment)…",
+    "emptyResult": "The rewrite came back empty; this revision was abandoned.",
+    "revisionPrompt": "De-AI revision ({{count}} marks handled)",
+    "tabName": "Ch. {{chapter}} · De-AI revision",
+    "completed": "Produced revision v{{version}} ({{length}} characters) for review; confirm it in the diff view before adopting.",
+    "baseDraftMissing": "⚠️ Base draft not found; the revision was not saved."
   }
 }

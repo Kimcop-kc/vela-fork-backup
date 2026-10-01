@@ -1,4 +1,4 @@
-import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool } from 'lucide-react'
+import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ScrollText, ChevronLeft, ChevronRight, PenTool } from 'lucide-react'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
@@ -15,6 +15,7 @@ import ArchFileViewer from '../editor/ArchFileViewer'
 import DraftEditor from '../editor/DraftEditor'
 import VersionHistory from '../editor/VersionHistory'
 import ReviewReport from '../editor/ReviewReport'
+import StyleGuideView from '../editor/StyleGuideView'
 import ThreeWayMerge from '../editor/ThreeWayMerge'  // 保留引用以防其他入口使用
 import WelcomePage from '../pages/WelcomePage'
 import KnowledgeOverview from '../pages/KnowledgeOverview'
@@ -453,6 +454,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     if (type === 'world-building') return <Globe size={14} />
     if (type === 'version-history') return <History size={14} />
     if (type === 'review-report') return <ClipboardCheck size={14} />
+    if (type === 'style-guide') return <ScrollText size={14} />
     return <FileText size={14} />
   }
 
@@ -643,6 +645,13 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
             draftPath={activeTab.filePath}
             chapterNumber={activeTab.chapterNumber}
             chapterDir={activeTab.chapterDir}
+          />
+        )}
+        {activeTab?.type === 'style-guide' && (
+          <StyleGuideView
+            key={activeTab.id}
+            content={activeTab.content ?? ''}
+            sourceTitle={activeTab.name}
           />
         )}
         {/* diff 合并视图 — 统一使用弹出式 Dialog（与 DraftEditor 一致） */}

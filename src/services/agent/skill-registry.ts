@@ -211,6 +211,31 @@ class SkillRegistryImpl {
 /** 全局 Skill 注册中心 */
 export const skillRegistry = new SkillRegistryImpl()
 
+/**
+ * 内置 Skill 名。
+ *
+ * 服务层按名取用 Skill，从而实现「可替换」：
+ * 用户把自己的同名 SKILL.md 放进 ~/.vela/skills/（或项目的 .vela/skills/），
+ * 即可整体替换内置方法，而无需改代码 —— 用户/项目 Skill 会覆盖同名内置 Skill。
+ */
+export const BUILTIN_SKILL_NAMES = {
+  /** 去 AI 味：提供语义改写方法（显式调用，不做自动改稿） */
+  deaiTone: 'de-ai-tone',
+  /** 文风仿写：提供从参考文本归纳文风的分析方法 */
+  styleImitation: 'style-imitation',
+} as const
+
+/** 按名读取 Skill 内容；未加载时返回 undefined，调用方应回退到内置兜底方法 */
+export function getSkillContent(name: string): string | undefined {
+  return skillRegistry.get(name)?.content
+}
+
+/** Skill 是否由用户/项目自定义（用于判断「可替换」是否已生效） */
+export function isSkillOverridden(name: string): boolean {
+  const source = skillRegistry.get(name)?.source
+  return source === 'user' || source === 'project'
+}
+
 // ===== SKILL.md 解析 =====
 
 /**
@@ -405,6 +430,92 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
 
 请先使用 read_project_state 了解项目的写作风格设定，
 再根据用户的具体问题提供定制化建议，并附上示例对比。`,
+    },
+    {
+      metadata: {
+        name: BUILTIN_SKILL_NAMES.deaiTone,
+        displayName: t('agent.skills.deaiTone.name'),
+        description: t('agent.skills.deaiTone.desc'),
+        whenToUse: t('agent.skills.deaiTone.when'),
+        argumentHint: t('agent.skills.deaiTone.args'),
+      },
+      content: `# 去 AI 味（语义改写方法）
+
+本 Skill 只在用户显式调用时生效。它提供的是**语义判断方法**，不是一份替换词表：
+请按方法逐处判断该不该改、怎么改，而不是把词表里的词机械换掉。
+
+## 一、先判断，再动手
+对每个被标记的位置，先回答三个问题：
+1. 这里为什么读起来像机器写的？（用词太抽象 / 句式太整齐 / 节奏太均匀 / 在替读者总结）
+2. 这段文字此刻承担什么功能？（推进动作 / 交代信息 / 渲染情绪 / 埋钩子）
+3. 在保住这个功能的前提下，一个真人会怎么写？先想两个候选，再挑更像人的那个。
+
+## 二、五类常见「AI 味」与对应手法
+1. **抽象替代具体** —— 「他感到一阵难以言喻的情绪」。
+   换成具体可感的身体反应或动作：手心的汗、放下杯子时磕到桌面的声音、没说完的半句话。
+2. **句式过于整齐** —— 连续同长度句、连续同结构开头。
+   长短句交错；允许残句与破折号打断；把一句拆成两句，或把两句并成一句。
+3. **过度总结** —— 段尾或章尾冒出「他知道，这一切才刚刚开始」。
+   删掉总结句，让事件自己收尾；或把总结改写成一个具体动作、一个物件意象。
+4. **解释而不是呈现** —— 先写情绪结论，再补原因。
+   去掉情绪的命名（愤怒、悲伤、震惊），只保留触发它的具体细节。
+5. **用词套子** —— 反复出现的「仿佛 / 犹如 / 宛如 / 不禁 / 深深地 / 缓缓地」。
+   同一个词在同一章里保留一次即可，其余改用具体动词或直接省略。
+
+## 三、绝对不能动的
+- 人名、地名、专有名词、数字、时间线
+- 已经发生的事件、对话传达的信息、伏笔与钩子
+- 段落划分与空行格式
+
+## 四、边界
+- 有的位置本来就自然，就保持原样。不要为了「改过」而改。
+- 修订幅度控制在 ±10% 字数以内。
+
+## 五、输出
+直接输出完整修订正文，不要输出说明、对比或 JSON。`,
+    },
+    {
+      metadata: {
+        name: BUILTIN_SKILL_NAMES.styleImitation,
+        displayName: t('agent.skills.styleImitation.name'),
+        description: t('agent.skills.styleImitation.desc'),
+        whenToUse: t('agent.skills.styleImitation.when'),
+        argumentHint: t('agent.skills.styleImitation.args'),
+      },
+      content: `# 文风仿写（分析方法）
+
+把参考文本编译成「有证据、可执行」的文风指南。
+本 Skill 负责分析方法；参考文本与量化特征由本地工具注入到上下文中。
+
+## 一、先找「稳定重复」
+出现过一次的叫偶然，反复出现三次以上的才叫风格。只归纳稳定重复的写法。
+量化特征里已经给出高频表达与标点频次 —— 从那里入手，但一定要回到原文确认语境。
+
+## 二、七个观察角度
+1. **视角与人称**：第几人称、是否限制视角、内心独白出现的频率与位置
+2. **句式与句长**：平均句长落在什么区间、长短句怎么交错、有没有标志性的断句方式
+3. **段落与节奏**：段落偏长还是偏短、场景切换靠空行还是靠过渡句、留白多少
+4. **对话与叙述配比**：对话占比、对话是否单独成段、叙述是否总是紧跟解释
+5. **用词倾向**：偏书面还是口语、喜用哪一类动词与形容词、有没有个人化的口头禅
+6. **意象与修辞**：反复出现的意象（雨、灯、镜子…）、比喻的密度与来源
+7. **标点习惯**：破折号、省略号、问号的偏好，以及它们承担的功能
+
+## 三、必须给证据
+每条结论都要附 1-3 条原文引文，逐字照抄，不要改写、不要用省略号省略。
+找不到证据的结论不要写 —— 宁可少写两条，也不要写没有依据的结论。
+
+## 四、必须可执行
+结论写成祈使句式的写作指令，让人拿起来就能照着写：
+- 好：「多用短句断句，单句控制在 12 字以内」
+- 不好：「文笔简洁有力」
+
+## 五、量化特征怎么用
+量化特征只是佐证，不要把它直接抄成结论；要解释「这个数字意味着什么」，
+也不要输出与量化特征明显矛盾的结论。
+
+## 六、输出
+只输出 JSON，其中每条规则包含 category、statement、evidence（原文引文）与 confidence。
+category 取 voice / syntax / rhythm / dialogue / lexicon / imagery / punctuation 之一。`,
     },
   ]
 

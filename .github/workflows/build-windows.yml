@@ -1,4 +1,4 @@
-name: Build Windows Vela (最终版)
+name: Build Vela (Windows + macOS)
 on:
   push:
     branches: [ master ]
@@ -6,14 +6,40 @@ on:
 
 jobs:
   build:
-    runs-on: windows-2022
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            label: Windows x64
+            artifact: Vela-Windows-x64
+            build_args: "-- --win --x64"
+            files: |
+              release/**/*.exe
+              !release/**/win-unpacked/**
+          - os: macos-latest
+            label: macOS x64 (Intel)
+            artifact: Vela-macOS-x64
+            build_args: "-- --mac --x64"
+            files: |
+              release/**/*.dmg
+          - os: macos-latest
+            label: macOS arm64 (Apple Silicon)
+            artifact: Vela-macOS-arm64
+            build_args: "-- --mac --arm64"
+            files: |
+              release/**/*.dmg
     steps:
       - name: 检出本仓库代码
         uses: actions/checkout@v4
+        shell: pwsh
 
       - name: 显示将要构建的提交
+        shell: pwsh
         run: git log -1 --format="%H %s"
 
       - name: Setup Node.js
@@ -22,35 +48,57 @@ jobs:
           node-version: 20
 
       - name: 配置 npm 镜像源
+        shell: pwsh
         run: npm config set registry https://registry.npmmirror.com
 
       - name: 清理可能存在的锁文件
+        shell: pwsh
         run: |
-          if (Test-Path "pnpm-lock.yaml") { Remove-Item -Path "pnpm-lock.yaml" -Force }
-          if (Test-Path "package-lock.json") { Remove-Item -Path "package-lock.json" -Force }
-          if (Test-Path "yarn.lock") { Remove-Item -Path "yarn.lock" -Force }
+          foreach ($f in @("pnpm-lock.yaml", "package-lock.json", "yarn.lock")) {
+            if (Test-Path $f) { Remove-Item -Path $f -Force }
+          }
           if (Test-Path "node_modules") { Remove-Item -Path "node_modules" -Recurse -Force }
 
       - name: 使用 npm 安装依赖
+        shell: pwsh
         run: |
           npm install --legacy-peer-deps
           if ($LASTEXITCODE -ne 0) {
             npm install --force --legacy-peer-deps
           }
 
-      - name: 构建 Windows 版本
-        run: npm run build
+      - name: 构建 ${{ matrix.label }}
+        shell: pwsh
+        run: npm run build ${{ matrix.build_args }}
         env:
           GH_TOKEN: ${{ secrets.KK }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: 上传安装包到 Release
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = "v$v"
+          $files = Get-ChildItem -Path release -Recurse -File | Where-Object {
+            $_.Extension -in ".exe", ".dmg" -and $_.FullName -notmatch 'win-unpacked'
+          }
+          if (-not $files) { Write-Host "未找到安装包，跳过上传"; exit 0 }
+          $exists = $true
+          try { gh release view $tag *> $null } catch { $exists = $false }
+          if (-not $exists) { Write-Host "Release $tag 不存在，跳过上传"; exit 0 }
+          foreach ($f in $files) {
+            Write-Host "上传 $($f.Name) -> $tag"
+            gh release upload $tag $f.FullName --clobber
+          }
 
       - name: 上传构建结果
         uses: actions/upload-artifact@v4
         with:
-          name: Vela-Windows-Exe-Final
-          path: |
-            release/**/*.exe
-            !release/**/win-unpacked/**
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.files }}
           retention-days: 30
 
       - name: 显示构建结果
-        run: Get-ChildItem -Path release -Recurse -Filter *.exe
+        shell: pwsh
+        run: Get-ChildItem -Path release -Recurse -Include *.exe, *.dmg | Select-Object FullName, Length

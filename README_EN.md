@@ -17,7 +17,7 @@
 
 [Read in Chinese (中文)](README.md) | [Read in Russian (Русский)](README_RU.md)
 
-[Installation](#installation) | [Key Features](#key-features) | [Model Configuration](#model-configuration) | [🌟 Recommended API: Fluxion AI](#fluxion-ai)
+[Installation](#installation) | [Key Features](#key-features) | [Model Configuration](#model-configuration) | [📝 Changelog](CHANGELOG.md) | [💬 Contact](#-feedback--contact) | [🌟 Recommended API: Fluxion AI](#fluxion-ai)
 
 </div>
 
@@ -226,6 +226,19 @@ We welcome community contributions, including but not limited to:
 - Documentation improvements
 
 > For major feature refactors, please discuss with the author first in [Issues](https://github.com/Kimcop-kc/vela/issues) to avoid direction conflicts.
+
+---
+
+## 💬 Feedback & Contact
+
+Found a bug, have an idea, or just want to talk about writing? Reach out:
+
+- 🐛 **Bugs / feature requests**: please open an [Issue](https://github.com/Kimcop-kc/vela/issues) first — it keeps things trackable and searchable for everyone.
+- 💬 **WeChat / QQ**: scan the QR codes below (please mention "Vela" when adding).
+
+| WeChat | QQ |
+|:---:|:---:|
+| <img src="docs/images/contact-wechat.png" width="200" alt="WeChat QR code"/> | <img src="docs/images/contact-qq.png" width="200" alt="QQ QR code"/> |
 
 ---
 

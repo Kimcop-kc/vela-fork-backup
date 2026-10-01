@@ -14,7 +14,7 @@
 
 ### ⬇️ [**点此下载最新版 Vela**](https://github.com/Kimcop-kc/vela/releases/latest) — macOS（Apple 芯片 / Intel）· Windows x64
 
-[🚀 安装与使用](#-安装与使用--installation) • [✨ 核心特性](#-核心特性--key-features) • [⚙️ 模型配置](#️-模型配置--model-configuration) • [❓ 常见问题](#-常见问题--faq) • [🌟 API 渠道推荐](#fluxion-ai)
+[🚀 安装与使用](#-安装与使用--installation) • [✨ 核心特性](#-核心特性--key-features) • [⚙️ 模型配置](#️-模型配置--model-configuration) • [❓ 常见问题](#-常见问题--faq) • [📝 更新日志](CHANGELOG.md) • [💬 反馈与联系](#-反馈与联系--contact)
 
 </div>
 
@@ -313,6 +313,20 @@ Vela 应用本身免费开源（GPL-3.0），不收取任何费用。唯一的�
 
 ---
 
+## 💬 反馈与联系 / Contact
+
+用 Vela 遇到问题、有想法，或者只是想聊聊写作，都欢迎找我：
+
+- 🐛 **Bug 反馈 / 功能建议**：优先提到 [Issues](https://github.com/Kimcop-kc/vela/issues)，方便追踪和沉淀，其他人也能搜到。
+- 💬 **微信 / QQ**：扫码添加，加好友时备注一下「Vela」，方便我优先处理。
+
+| 微信 WeChat | QQ |
+|:---:|:---:|
+| <img src="docs/images/contact-wechat.png" width="200" alt="微信二维码"/> | <img src="docs/images/contact-qq.png" width="200" alt="QQ 二维码"/> |
+| 扫码加微信 | 扫码加 QQ |
+
+---
+
 ## 📄 开源协议 / License
 
 本项目采用 [GPL-3.0 License](LICENSE) 开源。您可以自由地运行、研究、分享和修改代码，但基于此修改分发的新软件**必须同样遵循 GPL-3.0 协议开源**。
@@ -325,7 +339,7 @@ Vela 应用本身免费开源（GPL-3.0），不收取任何费用。唯一的�
 
 ⭐ **如果 Vela 对你的写作有帮助，欢迎在右上角点个 Star —— 这是对开源项目最实在的支持。** ⭐
 
-[⬇️ 下载最新版](https://github.com/Kimcop-kc/vela/releases/latest) · [🐛 反馈问题](https://github.com/Kimcop-kc/vela/issues) · [💡 功能建议](https://github.com/Kimcop-kc/vela/issues)
+[⬇️ 下载最新版](https://github.com/Kimcop-kc/vela/releases/latest) · [🐛 反馈问题](https://github.com/Kimcop-kc/vela/issues) · [💡 功能建议](https://github.com/Kimcop-kc/vela/issues) · [📝 更新日志](CHANGELOG.md)
 
 **由 [Kimcop-kc](https://github.com/Kimcop-kc) 维护 · 基于 Vela 开源项目二次开发**
 

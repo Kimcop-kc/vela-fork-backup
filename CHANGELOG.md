@@ -1,249 +1,68 @@
-# CHANGELOG — PR #13「Vela Lite」修复
+# 更新日志 / Changelog
 
-> 审计 + 修复 + 验证：5 个 patch 文件 + 23 个漏洞 + 72 个回归测试
+Vela 的所有重要变更都会记录在这里。版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## 审计摘要
+格式说明：`新增` 是新功能，`改进` 是体验优化，`修复` 是问题修正，`构建` 是打包与发布相关。
 
-| 维度 | 数值 |
-|------|------|
-| 通读文件数 | 38 个 / ~8750 行 |
-| 复现脚本 | 5 轮 / 24+ 个 case |
-| 确认漏洞 | **23 个真实** |
-| 误报 | 8 个（已剔除） |
-| 严重度分布 | 🔴 P0 × 5，🟠 P1 × 8，🟢 P3 × 10 |
-| Patch 文件 | 5 个 (~650 行) |
-| 回归测试 | **+12 个** (从 33 → 45 → 72) |
-| 性能提升 | **1.36x - 7.05x**（按输入规模） |
-| IPC chatter 减少 | **85%**（40 → 6 calls per 5 章） |
-| TypeScript | 0 错误 |
-| ESLint（新增） | 0 错误（预存在错误已识别） |
+---
 
-## 修复的 23 个漏洞
+## [Unreleased]
 
-### 🔴 P0（5 个）— 数据丢失 / 正确性崩溃
+暂无。
 
-| # | 问题 | 文件:行 | 复现 |
-|---|------|---------|------|
-| 1 | `writeback` 非原子 → 章节 canon 数据丢失 | `canon-store.ts:142-200` | F4/F13 ✓ |
-| 2 | `upsertCharacterState` knowledge 被覆盖而非 merge | `canon-repository.ts:155-194` | F1 ✓ |
-| 3 | `deathSignals` 把单字 `死` 当死亡信号 → 成语误报 | `validator.ts:393-413` | F2v2 ✓（"死灰复燃"误报） |
-| 4 | `stateSignals` 缺常见动词（飞/遁/跳/望/听） | `fact-extractor.ts:104-114` | F31 ✓ |
-| 5 | fact-extractor 子串匹配导致 "林轩" 命中 "林轩雨" 段落 | `fact-extractor.ts:117-119` | F3v3 ✓ |
+---
 
-### 🟠 P1（8 个）— 一致性逻辑绕过 / 静默失败
+## [0.2.0] — 2026-10-01
 
-| # | 问题 | 文件 | 复现 |
-|---|------|------|------|
-| 6 | `safeParse` 静默吞 JSON 错（损坏数据假装正常） | `canon-repository.ts:43-46` | F6 ✓ |
-| 7 | `addFact` dedup 字符串脆弱（大小写/空格绕过） | `canon-repository.ts:265-285` | F7 ✓ |
-| 8 | `appendTimelineEvent` 缺 UNIQUE 约束（重复 sequence） | `canon-repository.ts:114-126` | F8 ✓ |
-| 9 | 知识 substring bypass（"玉佩" 命中"那块玉佩的来历"） | `validator.ts:150-163` | F5/F23 |
-| 10 | `tryAutoFix` 只修第一处 evidence | `auto-fix.ts:73-87` | F15/F28 ✓ |
-| 11 | `fixLocationJump` 破坏章节结构（插入到标题行） | `auto-fix.ts:104-125` | F33 ✓ |
-| 12 | `fixLocationJump` 假设性别（"他"） | `auto-fix.ts:122` | (dead code, but kept `charName`) |
-| 13 | **Prompt injection via canon data**（LLM 写入 evidence 注入下一轮 prompt） | `context-builder.ts:99-101`, `prompt-builder.ts:35` | F12/F29 ✓ |
+由 Kimcop-kc 维护发布，并首次实现双平台安装包自动构建。
 
-### 🟢 P3（10 个）— 性能 / 设计选择
+### 新增
 
-| # | 问题 | 文件 |
-|---|------|------|
-| 14 | 关系 fact regex 太严 | `fact-extractor.ts:196-198` |
-| 15 | 上一章衔接检查噪音（2-4 字匹配太多） | `validator.ts:296-321` |
-| 16 | `writeback` 跨 10+ IPC roundtrip | `canon-store.ts:142-200` |
-| 17 | `db:canon-writeback-atomic` 缺类型声明 | `ipc-channels.ts:313`（**新加**） |
-| 18 | `getProjectDb` 在非-Electron 环境静默失败 | `canon-store.ts:30-50` |
-| 19 | `addPlotLine` dedup 字符串脆弱 | `canon-repository.ts:213-235` |
-| 20 | `safeParse` 静默吐 `[]` 而非抛错 | `canon-repository.ts:43-46` |
-| 21 | knowledge 列表被覆盖 | `canon-repository.ts:155-194` |
-| 22 | fact-extractor evidence 超长未截断 | `fact-extractor.ts:177-205` |
-| 23 | `canon_timeline_events.time_flow` 缺 CHECK 约束 | `database.ts` |
+- **技能（Skill）体系**：可在应用内导入、编辑、启用/停用 Skill，写作过程中按需调用，不再依赖隐藏词表自动改稿。
+- **本地拆书知识库**：导入参考小说后做结构化拆解，把「别人怎么写」变成可检索、可复用的本地知识，供写作时召回。
+- **文风分析与仿写**：粘贴参考文本即可生成有证据、可执行的文风指南，写作时按指南仿写。
+- **小说导出**：支持导出 EPUB / TXT 等常见小说格式，便于投稿、分发与备份。
+- **多模型管理**：先导入模型，再在「用途」栏为写作 / 润色 / Embedding 等不同任务分别绑定模型，支持同一服务商的多个模型并存。
+- **可停靠底部面板**：模型调用、日志、任务三个面板可停靠到「项目结构 / Agent」栏下方，不再悬浮遮挡中间编辑区。
+- **定性审稿 + 去 AI 味**：连续性审查会从角色记忆、物资连续性、伏笔回收、大纲偏离、叙事节奏、情感弧线等维度记录具体 observation；内置 AI 痕迹检测会标出高频词、句式单调、过度总结等可修订位置。observation 是可追溯的创作反馈，不会把章节改写成「通过/失败」状态，用户或 Agent 可据此显式发起修订。
+- **长输出任务分段生成**：全量章节蓝图、蓝图续写、章节要点、角色卡更新、逆向推演（配置 / 带向量配置 / 单章蓝图）、初始角色卡提取等任务，在超出模型上下文或输出上限时自动分段续写，不再因内容过长而整体失败。
 
-## Patch 文件清单
+### 改进
 
-```
-patches/
-├── 01-canon-repository.patch          # F1, F2, F6, F7, F8, F19, F20, F21, F22
-├── 02-canon-store-atomic-writeback.patch  # F4, F13, F16
-├── 03-validator-death-knowledge.patch  # F3, F9
-├── 04-fact-extractor-state-signals.patch  # F5, F31
-└── 05-autofix-and-context-escape.patch  # F10, F11, F12, F13, F28
-```
+- 长输出任务失败时给出明确原因（「模型输出达到长度上限，结果不完整，未提交本轮操作」），不再静默失败。
+- 界面排版调整：侧栏面板不再遮挡主编辑区。
 
-## 新增的测试
+### 修复
 
-### 回归测试套件（防止 bug 复发）
+- 修复模型调用统计始终为 0（`common.calls` / `common.tokens` / `input` / `output` 均无数据）。
+- 修复部分长文本任务超过模型输出上限后直接中断的问题。
 
-`src/services/narrative-consistency/__tests__/narrative-consistency.test.ts` 新增 12 个 `describe('回归测试：审计发现的 bug 修复验证')` 块：
+### 构建
 
-- F1: knowledge merge（union + dedup）
-- F2: 死灰复燃/视死如归 等成语不触发"复活"
-- F4/F13: writeback 必须用 `db:canon-writeback-atomic`
-- F6: corrupt JSON 必须抛错
-- F7: addFact 规范化去重（大小写/空格不敏感）
-- F8: timeline sequence ON CONFLICT（覆盖而非重复）
-- F12/F29: prompt builder 转义 `{{}}`
-- F15/F28: tryAutoFix 处理所有 occurrence
-- F18: 多个 issues 同样 evidence 都触发插入
-- F31: stateSignals 包含"飞"
-- F33: fixLocationJump 不破坏标题
-- F33b: fixLocationJump 在 narrative line 上正常工作
+- GitHub Actions 自动构建并上传三套安装包：**Windows x64**、**macOS x64 (Intel)**、**macOS arm64 (Apple Silicon)**。
+- 安装包统一命名带平台与架构，例如 `Vela-0.2.0-Windows-x64-Setup.exe`、`Vela-0.2.0-macOS-arm64-Installer.dmg`。
+- macOS x64 改为在原生 Intel 环境构建，修复交叉编译导致原生模块（better-sqlite3 / LanceDB）架构不匹配的问题。
+- 修复 macOS 打包时 `dmg-builder` 二进制从镜像站下载 404 导致的构建失败（改为走官方源）。
+- 修复 CI 中 npm 缓存、并发写同一 Release、纯文档改动仍触发打包等问题。
 
-### IPC 校验测试（DoS 防护）
+### 文档
 
-`electron/__tests__/ipc-validation.test.ts` 新增 24 个 case：
+- README 重写：新增一键下载入口、系统要求、安装包平台对照表。
+- 补充 macOS 未签名安装说明（右键打开 / `xattr -dr com.apple.quarantine`）与 Windows SmartScreen 提示。
+- 新增常见问题 FAQ（数据存放位置、备份、升级、离线使用等）。
 
-- 字符串长度限制（防止 1GB string）
-- 数字范围
-- 枚举值校验
-- 数组长度限制
-- 嵌套 payload 校验
-- `safeValidate` 包装器测试
+---
 
-### 性能回归测试（防止优化退化）
+## [0.1.0] — 初始版本
 
-`src/services/narrative-consistency/__tests__/perf-regression.test.ts` 新增 3 个 case：
+- 首个公开版本：世界观与设定管理、自动大纲与细纲生成、流式章节正文生成、AI 智能重写、语病与错别字精修、剧情自评审阅、Rewrite → Refine → Review 三重后期管线。
+- 百万字级本地 RAG 知识库：SQLite + 本地向量检索，支持批量导入设定与参考小说，断网可用。
+- BYOK 自带模型：OpenAI / DeepSeek / Google Gemini / Anthropic Claude / Ollama（本地离线）/ 智谱 GLM / MiniMax / SiliconFlow / 任意 OpenAI 兼容接口。
+- MCP 协议扩展，可外挂自定义工具服务器。
+- IDE 级生产力 UI：可拖拽四分屏、深色主题、全局快捷键。
 
-- 10K chars + 20 chars: < 10ms
-- 20K chars + 50 chars: < 30ms
-- 200 章节批量: < 200ms
+---
 
-## 新增的模块
-
-### `electron/ipc-validation.ts`
-
-主进程入口的统一校验层，**防止**：
-- DoS via 巨型 string（1GB statement 直接落 SQLite）
-- Type confusion（renderer 发错字段类型）
-- Data corruption（type 不在 enum 内）
-
-提供 8 个具体 validator：
-- `validateCanonTimelineEventInput`
-- `validateCanonFactInput`
-- `validateCanonPlotLineInput`
-- `validateCanonCharacterStateSnapshot`
-- `validateCanonChapterSummary`
-- `validateCanonWritebackPayload`
-- `validateCanonTimelineEvent`
-- `safeValidate` 包装器
-
-每个 validator 检查：
-- 类型
-- 长度上限（statement 500 字、name 200 字、list 1000 等）
-- 枚举值（VALID_CATEGORIES, VALID_TIMEFLOW, VALID_PLOT_STATUS）
-- 必需字段
-
-## 数据库 schema 变更
-
-`electron/database.ts` 新增：
-- `migrateProjectDatabase()` 函数：迁移老库，加 UNIQUE 索引
-- `idx_canon_timeline_unique` on `(chapter_number, sequence)`
-- `idx_canon_facts_unique` on `statement COLLATE NOCASE`
-- `idx_canon_plot_unique` on `name COLLATE NOCASE`
-- `user_version` PRAGMA 跟踪 schema 版本（当前 v1）
-
-迁移逻辑：清理重复数据 → 建索引 → 幂等（重跑安全）
-
-## IPC 类型声明补全
-
-`src/shared/ipc-channels.ts` 新增：
-- `db:canon-writeback-atomic` 频道类型
-- `CanonWritebackPayload` 接口（与主进程 `writebackAtomically` 入参兼容）
-- 所有字段都有精确类型（避免 `any`）
-
-## 性能对比
-
-### 真实中文章节（939 chars, 3 characters）
-
-| 组件 | 原版 | 修复后 | 加速 |
-|------|------|--------|------|
-| `validateChapter` | 0.15ms | 0.11ms | 1.36x |
-| `runConsistencyGate` | 0.14ms | 0.12ms | 1.17x |
-
-### 合成大数据
-
-| 规模 | 原版 | 修复后 | 加速 |
-|------|------|--------|------|
-| 2K chars, 5 chars | 0.30ms | 0.08ms | 3.56x |
-| 5K chars, 10 chars | 1.15ms | 0.26ms | 4.35x |
-| 10K chars, 20 chars | 2.77ms | 0.70ms | 3.94x |
-| **20K chars, 50 chars** | **11.66ms** | **1.65ms** | **7.05x** |
-
-### 200 章书
-
-- 校验 200 章: 34ms (0.17ms/chapter)
-- 写回 200 章: 1ms (400 IPC, 2/chapter)
-- 插入 10K facts: 257ms (0.027ms/fact)
-
-## 自动化验证
-
-新增 `ci-validate.sh`：单条命令跑完整套 CI
-
-```bash
-./ci-validate.sh
-```
-
-10 个 step：
-1. TypeScript compile
-2. Vitest unit tests (72)
-3. Self-contained tests (24)
-4. Demo e2e
-5. Terminal demo
-6. Patch verification (14)
-7. Adversarial round 1
-8. Realistic Chinese benchmark
-9. Stress test (200 chapters, 10K facts)
-10. ESLint (patched files)
-
-## 文件清单
-
-```
-src/services/narrative-consistency/
-├── __tests__/
-│   ├── narrative-consistency.test.ts  (45 tests, +12 regression)
-│   └── perf-regression.test.ts        (3 perf tests, NEW)
-├── canon-store.ts                     (writeback atomic)
-├── validator.ts                       (deathSignals + knowledgeMatch)
-├── auto-fix.ts                        (fixAll + structure)
-├── fact-extractor.ts                  (stateSignals + boundary)
-└── context-builder.ts                 (escape + slice)
-
-electron/
-├── ipc-validation.ts                  (NEW: zod-style validators)
-├── __tests__/
-│   └── ipc-validation.test.ts         (24 tests, NEW)
-├── database.ts                        (migrateProjectDatabase)
-├── repositories/canon-repository.ts   (writebackAtomically + merge + UNIQUE)
-└── controllers/db-controller.ts       (apply validators to all canon handlers)
-
-patches/
-├── 01-canon-repository.patch
-├── 02-canon-store-atomic-writeback.patch
-├── 03-validator-death-knowledge.patch
-├── 04-fact-extractor-state-signals.patch
-└── 05-autofix-and-context-escape.patch
-
-ci-validate.sh                          (10-step CI)
-adversarial-verify*.mjs                 (4 rounds of reproducers)
-verify-patches.mjs                      (14 patch verifications)
-realistic-benchmark.mjs                 (realistic perf)
-stress-test.mjs                         (200-chapter stress)
-CHANGELOG.md                            (this file)
-```
-
-## 仍未修的问题（按设计 / 低优先级）
-
-| 问题 | 决策 |
-|------|------|
-| location check 只对已知角色 | 设计选择（需要先在 canon store 登记） |
-| buildCanonContext 拉全量 IPC 数据 | IPC 限制；更优解改 SQL |
-| `run-standalone.mjs` setup 错误 | 预存在，非我引入 |
-| `stability-controller.service.ts` 3 个未用参数 | 预存在 |
-| `auto-fix.ts:buildReport._originalContent` 未用 | 预存在 |
-
-## 还能做的事（未来工作）
-
-1. 把 `knowledgeMatch` 升级为基于 embedding 的语义相似度
-2. 把 `stateSignals` 升级为基于 POS tagging 的抽取
-3. 把 IPC validators 提取到共享包，让 renderer 端也能用
-4. 加 LLM 输出的 audit（生成内容 vs canon 的一致性评分）
-5. 加 `ncu` 性能 profiling（CUDA-style timeline）
+[Unreleased]: https://github.com/Kimcop-kc/vela/commits/master
+[0.2.0]: https://github.com/Kimcop-kc/vela/releases/tag/v0.2.0
+[0.1.0]: https://github.com/Kimcop-kc/vela/tags

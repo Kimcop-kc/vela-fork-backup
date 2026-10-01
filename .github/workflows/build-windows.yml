@@ -3,6 +3,12 @@ name: Build Vela (Windows + macOS)
 on:
   push:
     branches: [ master, main ]
+    # 只改文档 / 说明文件时不重新打包
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
   workflow_dispatch:
 
 # 三个矩阵任务会并发写同一个 Release，加锁避免互相覆盖

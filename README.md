@@ -11,8 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6.svg)](https://www.typescriptlang.org/)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
 
-[🚀 下载客户端 / Download](#-安装与使用--installation) • [🌟 API 渠道推荐 / Fluxion AI](#fluxion-ai) • [☕ 赞助作者 / Sponsor](#-赞助与支持--sponsor)
-
+[🚀 下载客户端 / Download](#-安装与使用--installation) • [🌟 API 渠道推荐 / Fluxion AI](#fluxion-ai)
 </div>
 
 > 💡 **写小说不想折腾 Key？** 试试 [Fluxion AI](https://fluxionai.space/register?source=github&campaign=vela&promo=VELA) —— 一个入口接入并管理全球主流 AI 模型，OpenAI 兼容、开箱即用，**注册即送 $3 API 额度**。👉 [立即领取](https://fluxionai.space/register?source=github&campaign=vela&promo=VELA)
@@ -103,8 +102,37 @@ Vela 不是又一个带对话框的文本编辑器——它是一套深度融合
 ### 方式一：直接下载 / Direct Download
 
 前往 [Releases](https://github.com/heider-x/vela/releases) 下载对应操作系统的最新版本：
-- **macOS**: `.dmg` 安装包
-- **Windows**: `.exe` 安装程序 (NSIS)
+
+| 平台 | 安装包 | 说明 |
+|---|---|---|
+| macOS（Apple 芯片 M1/M2/M3/M4） | `Vela-<版本>-macOS-arm64-Installer.dmg` | Apple 芯片 Mac 使用 |
+| macOS（Intel） | `Vela-<版本>-macOS-x64-Installer.dmg` | Intel 芯片 Mac 使用 |
+| Windows x64 | `Vela-<版本>-Windows-x64-Setup.exe` | 安装版，可自选安装目录 |
+| Windows x64 | `Vela-<版本>-Windows-x64-Portable.exe` | 免安装版，双击即用 |
+
+#### 🍎 macOS 安装说明（重要）
+
+macOS 安装包**没有购买 Apple 开发者签名与公证**，首次打开时系统一定会拦截，这是正常的，按下面步骤做一次即可：
+
+1. **先确认自己的芯片**：点屏幕左上角苹果菜单 → 「关于本机」，看「芯片」或「处理器」一栏：
+   - Apple M1 / M2 / M3 / M4 → 下载 `macOS-arm64` 那个安装包
+   - Intel → 下载 `macOS-x64` 那个安装包
+2. 双击下载好的 `.dmg`，把 **Vela** 图标拖进「应用程序」文件夹。
+3. **首次启动不要双击**：打开「应用程序」文件夹，**右键点 Vela（或按住 Control 再点）→ 选「打开」**，弹窗里再点一次「打开」。这样可以直接放行。
+4. 如果提示「**"Vela" 已损坏，无法打开**」或「无法验证开发者」，打开「终端」（启动台里搜索 "终端" / Terminal），粘贴执行下面这一行：
+
+   ```bash
+   sudo xattr -dr com.apple.quarantine /Applications/Vela.app
+   ```
+
+   回车后输入开机密码（终端里输入密码不显示任何字符，正常输入完回车即可），然后再打开 Vela。
+5. 或者更简单的办法：在拦截弹窗上点「好」，然后打开「**系统设置 → 隐私与安全性**」，拉到最下面找到关于 Vela 的提示，点「**仍要打开**」。
+
+> 以上操作**只需要做一次**，之后就能像普通应用一样双击启动。
+
+#### 🪟 Windows 安装说明
+
+安装包同样没有购买代码签名。如果打开时出现蓝色的「Windows 已保护你的电脑」提示，点「**更多信息 → 仍要运行**」即可。
 
 ### 方式二：源码构建 / Build from Source
 
@@ -170,19 +198,6 @@ Fluxion AI 面向个人开发者、技术团队与企业，通过统一 API 接�
 
 ---
 
-## 🤝 赞助与支持 / Sponsor
-
-Vela 开源版由独立开发者利用业余时间热情驱动。如果这个工具有效提升了您的小说创作效率，欢迎扫码赞助！您的每一份支持都是我持续迭代的最大动力 ❤️
-
-### 👤 技术交流与合作 / Contact
-
-如果您对本项目的商业化落地（SaaS 授权）、AI 写作技术实现或产品方向感兴趣，欢迎扫码加我个人微信：
-
-<p align="left">
-  <img src="public/buyme/wechat.jpg" width="200" alt="个人微信 Author WeChat"/>
-</p>
----
-
 ## 🏗️ 技术架构 / Tech Stack
 
 | 层级 / Layer | 技术 / Technology |
@@ -213,7 +228,7 @@ Vela 开源版由独立开发者利用业余时间热情驱动。如果这个工
 
 本项目采用 [GPL-3.0 License](LICENSE) 开源。您可以自由地运行、研究、分享和修改代码，但基于此修改分发的新软件**必须同样遵循 GPL-3.0 协议开源**。
 
-如需闭源商用授权，请通过微信或邮件联系作者。
+如需闭源商用授权，请联系项目作者。
 
 ---
 

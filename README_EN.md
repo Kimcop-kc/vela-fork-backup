@@ -97,8 +97,37 @@ Vela is not just another chat-based text editor — it is a **production-grade n
 ### Direct Download
 
 Go to [Releases](https://github.com/Izya12/vela/releases) to download the latest version for your OS:
-- **macOS**: `.dmg` installer
-- **Windows**: `.exe` installer (NSIS)
+
+| Platform | Installer | Notes |
+|---|---|---|
+| macOS (Apple Silicon M1/M2/M3/M4) | `Vela-<version>-macOS-arm64-Installer.dmg` | For Apple Silicon Macs |
+| macOS (Intel) | `Vela-<version>-macOS-x64-Installer.dmg` | For Intel Macs |
+| Windows x64 | `Vela-<version>-Windows-x64-Setup.exe` | Installer, custom install folder supported |
+| Windows x64 | `Vela-<version>-Windows-x64-Portable.exe` | Portable, just double-click |
+
+#### 🍎 macOS Installation (Important)
+
+The macOS builds are **not code-signed or notarized with an Apple Developer certificate**, so macOS blocks the first launch. This is expected — do the following once:
+
+1. **Pick the right build**: Apple menu → "About This Mac", check the "Chip" / "Processor" row:
+   - Apple M1 / M2 / M3 / M4 → download the `macOS-arm64` dmg
+   - Intel → download the `macOS-x64` dmg
+2. Open the `.dmg` and drag **Vela** into your **Applications** folder.
+3. **Do not double-click on the first launch**: open Applications, **right-click (or Control-click) Vela → Open**, then click **Open** in the dialog.
+4. If macOS says *"Vela is damaged and can't be opened"* or *"cannot verify the developer"*, open **Terminal** and run:
+
+   ```bash
+   sudo xattr -dr com.apple.quarantine /Applications/Vela.app
+   ```
+
+   Enter your login password (it stays invisible while typing), then launch Vela again.
+5. Alternatively, click "OK" on the warning, then go to **System Settings → Privacy & Security**, scroll to the bottom and click **Open Anyway** for Vela.
+
+> You only need to do this **once** — afterwards Vela launches like any other app.
+
+#### 🪟 Windows Installation
+
+The Windows builds are unsigned as well. If the blue "Windows protected your PC" dialog appears, click **More info → Run anyway**.
 
 ### Build from Source
 

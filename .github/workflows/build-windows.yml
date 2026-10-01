@@ -7,15 +7,14 @@ on:
 jobs:
   build:
     runs-on: windows-2022
-    # 如果你使用 GitHub 自带的 secrets.GITHUB_TOKEN，需要赋予写入权限
     permissions:
-      contents: write 
+      contents: write
     steps:
-      - name: Checkout empty workspace
+      - name: 检出本仓库代码
         uses: actions/checkout@v4
 
-      - name: Clone original vela repo into subfolder
-        run: git clone https://github.com/heider-x/vela.git vela-src
+      - name: 显示将要构建的提交
+        run: git log -1 --format="%H %s"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -26,7 +25,6 @@ jobs:
         run: npm config set registry https://registry.npmmirror.com
 
       - name: 清理可能存在的锁文件
-        working-directory: ./vela-src
         run: |
           if (Test-Path "pnpm-lock.yaml") { Remove-Item -Path "pnpm-lock.yaml" -Force }
           if (Test-Path "package-lock.json") { Remove-Item -Path "package-lock.json" -Force }
@@ -34,32 +32,25 @@ jobs:
           if (Test-Path "node_modules") { Remove-Item -Path "node_modules" -Recurse -Force }
 
       - name: 使用 npm 安装依赖
-        working-directory: ./vela-src
         run: |
           npm install --legacy-peer-deps
           if ($LASTEXITCODE -ne 0) {
             npm install --force --legacy-peer-deps
           }
 
-      # 【核心修改点】：将 GH_TOKEN 移到这里！
       - name: 构建 Windows 版本
-        working-directory: ./vela-src
         run: npm run build
         env:
-          GH_TOKEN: ${{ secrets.KK }}  # 对应你设置的 Secret 名字 KK
+          GH_TOKEN: ${{ secrets.KK }}
 
       - name: 上传构建结果
         uses: actions/upload-artifact@v4
         with:
           name: Vela-Windows-Exe-Final
-          path: vela-src/release/**/*.exe
+          path: |
+            release/**/*.exe
+            !release/**/win-unpacked/**
           retention-days: 30
-        # 这里不再需要 GH_TOKEN 了，因为上面已经完成了发布
 
-      -  name: 显示构建结果
-         working-directory: ./vela-src
-         run: |
-          echo "构建成功！"
-          echo "构建产物位置："
-          # 改成 Windows PowerShell 支持的写法
-           Get-ChildItem -Path release/0.1.0/*.exe
+      - name: 显示构建结果
+        run: Get-ChildItem -Path release -Recurse -Filter *.exe

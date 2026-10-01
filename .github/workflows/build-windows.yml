@@ -90,6 +90,8 @@ jobs:
             Write-Host "上传 $($f.Name) -> $tag"
             gh release upload $tag $f.FullName --clobber
           }
+        env:
+          GH_TOKEN: ${{ secrets.KK }}
 
       - name: 上传构建结果
         uses: actions/upload-artifact@v4

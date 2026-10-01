@@ -15,8 +15,8 @@
     "themeLabel": "主题: {{theme}}"
   },
   "statusBar": {
-    "supportAuthor": "❤️ 支持作者",
-    "sponsorTooltip": "商业合作与赞助支持",
+    "supportAuthor": "❤️ 打赏支持",
+    "sponsorTooltip": "打赏支持与联系方式",
     "currentModel": "当前模型：{{name}}",
     "clickToConfigModel": "点击配置模型",
     "noModel": "未配置模型",

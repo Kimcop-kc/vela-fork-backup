@@ -240,6 +240,12 @@ Found a bug, have an idea, or just want to talk about writing? Reach out:
 |:---:|:---:|
 | <img src="docs/images/contact-wechat.png" width="200" alt="WeChat QR code"/> | <img src="docs/images/contact-qq.png" width="200" alt="QQ QR code"/> |
 
+### ☕ If you find it useful, you can buy me a coffee
+
+Vela is free and keeps getting updates. If it has genuinely saved you time, feel free to scan the code below ❤️
+
+<img src="docs/images/reward-kk.png" width="220" alt="WeChat reward code"/>
+
 ---
 
 ## License

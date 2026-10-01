@@ -16,7 +16,7 @@
     "proxyDesc": "配置 HTTP / SOCKS5 代理，用于访问受限 API",
     "editorDesc": "字体大小、自动保存等编辑器偏好设置",
     "promptsDesc": "自定义 AI 创作各环节使用的提示词模板",
-    "aboutDesc": "商业合作与个人开发赞助"
+    "aboutDesc": "打赏支持与联系方式"
   },
   "appearance": {
     "theme": "主题",
@@ -143,10 +143,10 @@
     "hint": "切换后界面语言将立即生效"
   },
   "about": {
-    "sponsorship": "赞助与支持",
-    "sponsorDescription": "Vela 开源版由个人开发者利用业余时间热情驱动，如果这个工具有效提升了您的写作效率，或者您看到了它商业化的潜力，欢迎扫码赞助！您的支持是我持续迭代的最大动力 ❤️",
-    "businessInquiries": "商业合作与技术交流",
-    "businessDescription": "如果您对本项目的商业化落地（SaaS 授权）、技术实现细节或 AI 产品方向感兴趣，欢迎随时交流："
+    "sponsorship": "打赏支持",
+    "sponsorDescription": "如果觉得 Vela 好用，欢迎扫码打赏我，你的支持是我持续迭代的最大动力 ❤️",
+    "businessInquiries": "问题反馈与技术交流",
+    "businessDescription": "遇到问题、想提建议，或者对商业化落地、技术实现细节感兴趣，都欢迎加我微信："
   },
   "promptTemplates": {
     "generate_global_config": {

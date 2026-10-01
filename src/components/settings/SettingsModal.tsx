@@ -24,10 +24,9 @@ import { Switch } from '../ui/Switch'
 import OllamaModelPicker from './OllamaModelPicker'
 import PurposeBindingPanel from './PurposeBindingPanel'
 
-// 打赏/赞助 图片资源（通过 import 让 Vite 处理路径，确保打包后可正常加载）
-import wepayImg from '/buyme/wepay.jpg?url'
-import alipayImg from '/buyme/alipay.jpg?url'
-import wechatImg from '/buyme/wechat.jpg?url'
+// 打赏 / 联系方式 图片资源（通过 import 让 Vite 处理路径，确保打包后可正常加载）
+import rewardImg from '/buyme/reward.png?url'
+import wechatImg from '/buyme/wechat.png?url'
 
 // ==================== 分类定义 ====================
 
@@ -1052,7 +1051,7 @@ function AboutSection() {
       <div className="flex flex-col items-center justify-center py-8 rounded-xl space-y-2" style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
         <h1 className="text-2xl font-bold brand-gradient tracking-wider">Vela IDE</h1>
         <p className="text-sm opacity-80" style={{ color: 'var(--color-text)' }}>v{__APP_VERSION__}</p>
-        <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>Crafted with ❤️ by heider</p>
+        <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>Crafted with ❤️ by Kimcop-kc</p>
       </div>
 
       <div className="space-y-4 pt-2">
@@ -1061,8 +1060,7 @@ function AboutSection() {
           {t('about.sponsorDescription')}
         </p>
         <div className="flex gap-4 items-center">
-          <img src={wepayImg} alt="WeChat Pay" className="w-[180px] rounded-lg" style={{ border: '1px solid var(--color-border)' }} />
-          <img src={alipayImg} alt="Alipay" className="w-[180px] rounded-lg" style={{ border: '1px solid var(--color-border)' }} />
+          <img src={rewardImg} alt="Sponsor" className="w-[180px] rounded-lg" style={{ border: '1px solid var(--color-border)' }} />
         </div>
       </div>
 

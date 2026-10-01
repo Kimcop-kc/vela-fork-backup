@@ -12,6 +12,24 @@ Vela 的所有重要变更都会记录在这里。版本号遵循 [语义化版�
 
 ---
 
+## [0.2.1] — 2026-10-01
+
+界面中与作者身份相关的信息全部改为本项目维护者，并加入打赏支持入口。
+
+### 变更
+
+- 「设置 → 关于」中的署名由原作者改为 **Kimcop-kc**。
+- 「赞助与支持」改为「**打赏支持**」：展示维护者的微信赞赏码，文案改为「如果觉得 Vela 好用，欢迎扫码打赏我，你的支持是我持续迭代的最大动力」。
+- 「商业合作与技术交流」改为「**问题反馈与技术交流**」，展示维护者微信二维码。
+- 状态栏的「❤️ 支持作者」入口改为「❤️ 打赏支持」。
+- 打包资源中不再包含原作者的收款码与群二维码图片。
+
+### 文档
+
+- README 新增「☕ 打赏支持」板块（微信赞赏码），并保留微信 / QQ 两种联系方式。
+
+---
+
 ## [0.2.0] — 2026-10-01
 
 由 Kimcop-kc 维护发布，并首次实现双平台安装包自动构建。
@@ -63,6 +81,7 @@ Vela 的所有重要变更都会记录在这里。版本号遵循 [语义化版�
 
 ---
 
-[Unreleased]: https://github.com/Kimcop-kc/vela/commits/master
+[Unreleased]: https://github.com/Kimcop-kc/vela/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Kimcop-kc/vela/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Kimcop-kc/vela/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Kimcop-kc/vela/tags

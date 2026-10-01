@@ -1,8 +1,8 @@
 {
   "name": "vela",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Vela - AI 深度驱动的小说创作 IDE",
-  "author": "heider",
+  "author": "Kimcop-kc",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",

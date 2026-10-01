@@ -14,7 +14,7 @@
 
 ### ⬇️ [**点此下载最新版 Vela**](https://github.com/Kimcop-kc/vela/releases/latest) — macOS（Apple 芯片 / Intel）· Windows x64
 
-[🚀 安装与使用](#-安装与使用--installation) • [✨ 核心特性](#-核心特性--key-features) • [⚙️ 模型配置](#️-模型配置--model-configuration) • [❓ 常见问题](#-常见问题--faq) • [📝 更新日志](CHANGELOG.md) • [💬 反馈与联系](#-反馈与联系--contact)
+[🚀 安装与使用](#-安装与使用--installation) • [✨ 核心特性](#-核心特性--key-features) • [⚙️ 模型配置](#️-模型配置--model-configuration) • [❓ 常见问题](#-常见问题--faq) • [📝 更新日志](CHANGELOG.md) • [💬 反馈与联系](#-反馈与联系--contact) • [☕ 打赏支持](#-如果觉得好用可以打赏我)
 
 </div>
 
@@ -324,6 +324,12 @@ Vela 应用本身免费开源（GPL-3.0），不收取任何费用。唯一的�
 |:---:|:---:|
 | <img src="docs/images/contact-wechat.png" width="200" alt="微信二维码"/> | <img src="docs/images/contact-qq.png" width="200" alt="QQ 二维码"/> |
 | 扫码加微信 | 扫码加 QQ |
+
+### ☕ 如果觉得好用，可以打赏我
+
+Vela 一直在免费更新，如果它确实帮你省了时间、多写了字，欢迎扫码打赏 —— 这是最实在的支持 ❤️
+
+<img src="docs/images/reward-kk.png" width="220" alt="微信赞赏码"/>
 
 ---
 

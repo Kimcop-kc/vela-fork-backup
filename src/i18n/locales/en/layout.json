@@ -15,8 +15,8 @@
     "themeLabel": "Theme: {{theme}}"
   },
   "statusBar": {
-    "supportAuthor": "❤️ Support the Author",
-    "sponsorTooltip": "Business & Sponsorship",
+    "supportAuthor": "❤️ Support the Project",
+    "sponsorTooltip": "Support & Contact",
     "currentModel": "Current model: {{name}}",
     "clickToConfigModel": "Click to configure model",
     "noModel": "No model configured",

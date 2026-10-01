@@ -16,7 +16,7 @@
     "proxyDesc": "Configure HTTP / SOCKS5 proxy for restricted API access",
     "editorDesc": "Font size, auto-save and other editor preferences",
     "promptsDesc": "Customize prompt templates for AI writing stages",
-    "aboutDesc": "Business collaboration and developer sponsorship"
+    "aboutDesc": "Support the project and get in touch"
   },
   "appearance": {
     "theme": "Theme",
@@ -143,10 +143,10 @@
     "hint": "Language will change immediately after selection"
   },
   "about": {
-    "sponsorship": "Sponsorship & Support",
-    "sponsorDescription": "Vela is an open-source project driven by passion in spare time. If this tool has improved your writing efficiency or you see its commercial potential, feel free to sponsor! Your support is my biggest motivation to keep iterating ❤️",
-    "businessInquiries": "Business & Technical Collaboration",
-    "businessDescription": "If you're interested in commercial deployment (SaaS licensing), technical implementation details, or AI product direction, feel free to reach out:"
+    "sponsorship": "Support the Project",
+    "sponsorDescription": "If you find Vela useful, feel free to scan the code below and buy me a coffee — your support is what keeps this project going ❤️",
+    "businessInquiries": "Feedback & Technical Contact",
+    "businessDescription": "Found a bug, have a suggestion, or interested in commercial deployment or the technical details? Feel free to add me on WeChat:"
   },
   "promptTemplates": {
     "generate_global_config": {

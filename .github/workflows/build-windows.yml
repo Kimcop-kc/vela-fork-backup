@@ -8,7 +8,7 @@ on:
 # 三个矩阵任务会并发写同一个 Release，加锁避免互相覆盖
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -27,13 +27,13 @@ jobs:
             files: |
               release/**/*.exe
               !release/**/win-unpacked/**
-          - os: macos-13            # Intel 机器，直接编 x64，避免交叉编译原生依赖
+          - os: macos-15-intel      # Intel 机器，直接在 x64 上编，避免交叉编译原生依赖
             label: macOS x64 (Intel)
             artifact: Vela-macOS-x64
             build_args: "-- --mac --x64"
             files: |
               release/**/*.dmg
-          - os: macos-14            # Apple Silicon 机器，编 arm64
+          - os: macos-15            # Apple Silicon 机器，编 arm64
             label: macOS arm64 (Apple Silicon)
             artifact: Vela-macOS-arm64
             build_args: "-- --mac --arm64"
@@ -69,6 +69,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.KK }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # 强制 electron-builder 的 dmg-builder 等二进制从官方 GitHub 下载（npmmirror 缺新版会 404）
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
 
       - name: 上传安装包到 Release
         shell: bash

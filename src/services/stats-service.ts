@@ -9,6 +9,8 @@ import { ipc } from './ipc-client'
 /** LLM 调用统计 */
 export interface LLMStats {
   totalCalls: number
+  /** 其中失败的调用次数（失败的调用同样计入 totalCalls） */
+  failedCalls: number
   totalTokens: number
   totalPromptTokens: number
   totalCompletionTokens: number

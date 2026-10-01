@@ -391,7 +391,22 @@
   },
   "common": {
     "refresh": "Refresh",
-    "closePanel": "Close panel"
+    "closePanel": "Close panel",
+    "calls": "calls",
+    "tokens": "Tokens",
+    "input": "Input",
+    "output": "Output",
+    "time": "Time",
+    "model": "Model",
+    "purpose": "Purpose",
+    "duration": "Duration",
+    "status": "Status",
+    "failedCalls": "{{count}} failed",
+    "noRecords": "No call records",
+    "noLogs": "No logs yet",
+    "clearLogs": "Clear logs",
+    "autoScrollOn": "Auto-scroll: on",
+    "autoScrollOff": "Auto-scroll: off"
   },
   "knowledge": {
     "title": "Knowledge Base",

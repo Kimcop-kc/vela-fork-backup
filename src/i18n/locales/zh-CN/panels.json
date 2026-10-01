@@ -391,7 +391,22 @@
   },
   "common": {
     "refresh": "刷新",
-    "closePanel": "关闭面板"
+    "closePanel": "关闭面板",
+    "calls": "次调用",
+    "tokens": "Tokens",
+    "input": "输入",
+    "output": "输出",
+    "time": "时间",
+    "model": "模型",
+    "purpose": "用途",
+    "duration": "耗时",
+    "status": "状态",
+    "failedCalls": "失败 {{count}} 次",
+    "noRecords": "暂无调用记录",
+    "noLogs": "暂无日志",
+    "clearLogs": "清空日志",
+    "autoScrollOn": "自动滚动: 开",
+    "autoScrollOff": "自动滚动: 关"
   },
   "knowledge": {
     "title": "知识库",

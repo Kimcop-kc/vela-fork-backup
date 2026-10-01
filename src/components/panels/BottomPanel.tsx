@@ -543,7 +543,7 @@ function LogsView() {
 function ModelsView() {
   const { t } = useTranslation('panels')
   const [stats, setStats] = useState<{
-    totalCalls: number; totalTokens: number
+    totalCalls: number; failedCalls: number; totalTokens: number
     totalPromptTokens: number; totalCompletionTokens: number
   } | null>(null)
   const [history, setHistory] = useState<Array<{
@@ -553,17 +553,24 @@ function ModelsView() {
   }>>([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => { loadData() }, [])
+  // 面板打开期间定时刷新：此前只在挂载时读一次，跑完生成再回来看仍是 0，需要手动点刷新
+  useEffect(() => {
+    void loadData(false)
+    const timer = setInterval(() => { void loadData(false) }, 4000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const loadData = async () => {
-    setLoading(true)
+  /** silent=true 时用于后台轮询，不打断界面 */
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const { loadLLMData } = await import('../../services/stats-service')
       const { stats: s, history: h } = await loadLLMData(30)
       setStats(s)
       setHistory(h)
     } catch { /* 忽略 */ }
-    finally { setLoading(false) }
+    finally { if (!silent) setLoading(false) }
   }
 
   return (
@@ -587,6 +594,11 @@ function ModelsView() {
           <div className="text-[0.7rem] text-[var(--color-text-muted)]">
             {t('common.output')} <span className="font-mono text-[var(--color-text-secondary)]">{(stats.totalCompletionTokens / 1000).toFixed(1)}k</span>
           </div>
+          {stats.failedCalls > 0 && (
+            <div className="text-[0.7rem]" style={{ color: 'var(--color-error)' }}>
+              {t('common.failedCalls', { count: stats.failedCalls })}
+            </div>
+          )}
           </>
         ) : (
           <span className="text-[0.7rem] text-[var(--color-text-muted)]">{t('common.noRecords')}</span>
@@ -595,7 +607,7 @@ function ModelsView() {
           type="button"
           className="ml-auto flex items-center gap-1 text-[0.7rem] px-2 py-1 rounded hover:bg-[var(--color-hover)] transition-colors"
           style={{ color: 'var(--color-text-muted)' }}
-          onClick={loadData}
+          onClick={() => loadData()}
           disabled={loading}
         >
           {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}

@@ -391,7 +391,22 @@
   },
   "common": {
     "refresh": "Обновить",
-    "closePanel": "Закрыть панель"
+    "closePanel": "Закрыть панель",
+    "calls": "вызовов",
+    "tokens": "Токены",
+    "input": "Вход",
+    "output": "Выход",
+    "time": "Время",
+    "model": "Модель",
+    "purpose": "Назначение",
+    "duration": "Длительность",
+    "status": "Статус",
+    "failedCalls": "{{count}} с ошибкой",
+    "noRecords": "Нет записей вызовов",
+    "noLogs": "Логов пока нет",
+    "clearLogs": "Очистить логи",
+    "autoScrollOn": "Автопрокрутка: вкл",
+    "autoScrollOff": "Автопрокрутка: выкл"
   },
   "knowledge": {
     "title": "База знаний",

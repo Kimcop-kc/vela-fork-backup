@@ -26,24 +26,31 @@ export class LLMHistoryRepository {
     )
   }
 
-  /** 获取调用统计 */
+  /**
+   * 获取调用统计。
+   *
+   * 口径与「调用记录」列表保持一致：**包含失败调用**。
+   * 之前只统计 success = 1，导致列表里明明有记录、上方汇总却是 0（全部调用都失败时尤其明显）。
+   */
   static getStats(): {
     totalCalls: number
+    failedCalls: number
     totalTokens: number
     totalPromptTokens: number
     totalCompletionTokens: number
   } {
     const db = getProjectDb()
-    if (!db) return { totalCalls: 0, totalTokens: 0, totalPromptTokens: 0, totalCompletionTokens: 0 }
+    if (!db) return { totalCalls: 0, failedCalls: 0, totalTokens: 0, totalPromptTokens: 0, totalCompletionTokens: 0 }
 
     const row = db.prepare(`
       SELECT
         COUNT(*) as totalCalls,
+        COALESCE(SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), 0) as failedCalls,
         COALESCE(SUM(total_tokens), 0) as totalTokens,
         COALESCE(SUM(prompt_tokens), 0) as totalPromptTokens,
         COALESCE(SUM(completion_tokens), 0) as totalCompletionTokens
-      FROM llm_calls WHERE success = 1
-    `).get() as { totalCalls: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number }
+      FROM llm_calls
+    `).get() as { totalCalls: number; failedCalls: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number }
 
     return row
   }

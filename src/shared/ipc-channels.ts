@@ -299,7 +299,7 @@ export interface DatabaseChannels {
 
   // 沿用旧表
   'db:log-llm-call': { args: [call: Record<string, unknown>]; return: { success: boolean } }
-  'db:get-llm-stats': { args: []; return: { totalCalls: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number } }
+  'db:get-llm-stats': { args: []; return: { totalCalls: number; failedCalls: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number } }
   'db:get-llm-history': { args: [limit?: number]; return: unknown[] }
   'db:save-summary-snapshot': { args: [chapterNumber: number, characterStates: string]; return: { success: boolean } }
   'db:get-latest-summary': { args: []; return: { characterStates: string; chapterNumber: number } | null }

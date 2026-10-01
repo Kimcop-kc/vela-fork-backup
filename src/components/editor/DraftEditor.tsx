@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, ClipboardCheck, Wrench } from 'lucide-react'
+import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, ClipboardCheck, Wrench, Puzzle, Layers } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { useProjectStore } from '../../stores/project-store'
@@ -9,6 +9,8 @@ import CodeMirrorEditor from './CodeMirrorEditor'
 import ThreeWayMerge from './ThreeWayMerge'
 import { Button } from '../ui/Button'
 import { toast } from '../ui/Toast'
+import SkillInvokeDialog from './SkillInvokeDialog'
+import SkillPipelineDialog from './SkillPipelineDialog'
 import { confirm } from '../ui/Confirm'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
@@ -17,9 +19,12 @@ import {
   parseDraftMeta,
   type DraftMeta,
   type DraftStatus,
+  type SkillPipelineWorkflowStep,
 } from '../../services/workflows/chapter-workflow'
 import { getPendingRevisions, getReviewsForVersion, type RevisionEntry } from '../../services/draft-index'
 import { readDraftBody } from '../../stores/draft-store'
+import { skillRegistry, type LoadedSkill } from '../../services/agent/skill-registry'
+import { pipelineStepInput, type SkillPipeline } from '../../services/agent/skill-pipeline'
 import { ipc } from '../../services/ipc-client'
 import { globalEventBus } from '../../shared/event-bus'
 
@@ -100,6 +105,10 @@ export default function DraftEditor({ filePath, content }: Props) {
   const [saving, setSaving] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'refine' | 'review' | 'qualitative' | null>(null)
   const [userRefinePrompt, setUserRefinePrompt] = useState('')
+  // Skill 调用（把当前正文交给某个 Skill 处理）
+  const [skillDialogOpen, setSkillDialogOpen] = useState(false)
+  // Skill 流水线（多个 Skill 串联，每步之间可确认）
+  const [pipelineDialogOpen, setPipelineDialogOpen] = useState(false)
   // 审稿维度多选
   const REVIEW_DIMS = [
     { key: 'continuity', label: t('draftEditor.reviewDims.continuity'), desc: t('draftEditor.reviewDims.continuityDesc') },
@@ -199,6 +208,74 @@ export default function DraftEditor({ filePath, content }: Props) {
       }), false)
     } catch (e) {
       toast.error(t('draftEditor.qualitativeReviewStartFailed', { error: e }))
+    }
+  }
+
+  /** 调用 Skill 处理当前章节正文（结果输出到「AI 输出」面板，不自动改写草稿） */
+  const runSkill = async (skill: LoadedSkill, args: string, values: Record<string, string>) => {
+    if (!currentProject || !meta) return
+    try {
+      const { createSkillInvokeWorkflow } = await import('../../services/workflows/chapter-workflow')
+      const body = await readDraftBody(filePath)
+
+      useWorkflowStore.getState().startWorkflow(createSkillInvokeWorkflow({
+        skillName: skill.metadata.displayName ?? skill.metadata.name,
+        skillContent: skill.content,
+        args: args || undefined,
+        values: Object.keys(values).length > 0 ? values : undefined,
+        inputs: skill.metadata.inputs,
+        targetText: body,
+        targetLabel: t('draftEditor.skillInvokeTarget', {
+          chapter: meta.chapterNumber,
+          title: meta.chapterTitle ?? t('draftEditor.unknownTitle'),
+        }),
+      }), false)
+    } catch (e) {
+      toast.error(t('draftEditor.skillInvokeStartFailed', { error: e }))
+    }
+  }
+
+  /**
+   * 执行 Skill 流水线：多个 Skill 串成一条链，一次跑完。
+   *
+   * 以逐步确认的方式启动 —— 每步完成后暂停，用户在任务面板点「继续」才进入下一步。
+   */
+  const runPipeline = async (pipeline: SkillPipeline) => {
+    if (!currentProject || !meta) return
+    try {
+      const { createSkillPipelineWorkflow } = await import('../../services/workflows/chapter-workflow')
+      const body = await readDraftBody(filePath)
+
+      const steps: SkillPipelineWorkflowStep[] = []
+      for (let index = 0; index < pipeline.steps.length; index++) {
+        const step = pipeline.steps[index]
+        const skill = skillRegistry.get(step.skill)
+        if (!skill) {
+          toast.error(t('draftEditor.skillPipelineIssueUnknownSkill', { index: index + 1, skill: step.skill }))
+          return
+        }
+        const fields = skill.metadata.inputs ?? []
+        steps.push({
+          skillName: skill.metadata.displayName ?? skill.metadata.name,
+          skillContent: skill.content,
+          args: step.args,
+          values: step.values && Object.keys(step.values).length > 0 ? step.values : undefined,
+          inputs: fields.length > 0 ? fields : undefined,
+          input: pipelineStepInput(pipeline.steps, index),
+        })
+      }
+
+      useWorkflowStore.getState().startWorkflow(createSkillPipelineWorkflow({
+        pipelineName: pipeline.title || pipeline.name,
+        chapterText: body,
+        targetLabel: t('draftEditor.skillInvokeTarget', {
+          chapter: meta.chapterNumber,
+          title: meta.chapterTitle ?? t('draftEditor.unknownTitle'),
+        }),
+        steps,
+      }), true)
+    } catch (e) {
+      toast.error(t('draftEditor.skillPipelineStartFailed', { error: e }))
     }
   }
 
@@ -451,6 +528,30 @@ export default function DraftEditor({ filePath, content }: Props) {
               {t('draftEditor.qualitativeReview')}
             </Button>
 
+            {/* 调用 Skill 处理本章正文 */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSkillDialogOpen(true)}
+              disabled={isChapterBusy}
+              title={t('draftEditor.skillInvokeTooltip')}
+            >
+              <Puzzle size={12} />
+              {t('draftEditor.skillInvoke')}
+            </Button>
+
+            {/* Skill 流水线：多个 Skill 串成一条链，每步之间可人工确认 */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPipelineDialogOpen(true)}
+              disabled={isChapterBusy}
+              title={t('draftEditor.skillPipelineTooltip')}
+            >
+              <Layers size={12} />
+              {t('draftEditor.skillPipeline')}
+            </Button>
+
             {/* 定稿 */}
             <Button
               variant="success"
@@ -629,6 +730,20 @@ export default function DraftEditor({ filePath, content }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Skill 调用弹窗：把本章正文交给选中的 Skill 处理 */}
+      <SkillInvokeDialog
+        open={skillDialogOpen}
+        onClose={() => setSkillDialogOpen(false)}
+        onRun={(skill, args, values) => { void runSkill(skill, args, values) }}
+      />
+
+      {/* Skill 流水线弹窗：把多个 Skill 串成一条链，逐步确认 */}
+      <SkillPipelineDialog
+        open={pipelineDialogOpen}
+        onClose={() => setPipelineDialogOpen(false)}
+        onRun={(pipeline) => { void runPipeline(pipeline) }}
+      />
 
       {/* 弹出式三栏合并视图 —— 使用统一 Dialog 组件 */}
       <Dialog open={mergeData !== null} onOpenChange={(v) => !v && setMergeData(null)}>

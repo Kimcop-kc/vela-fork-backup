@@ -37,6 +37,8 @@ export default function App() {
   const sidebarOpen = useLayoutStore(s => s.sidebarOpen)
   const aiPanelOpen = useLayoutStore(s => s.aiPanelOpen)
   const rightView = useLayoutStore(s => s.rightView)
+  const bottomPanelOpen = useLayoutStore(s => s.bottomPanelOpen)
+  const bottomDock = useLayoutStore(s => s.bottomDock)
   const settingsOpen = useLayoutStore(s => s.settingsOpen)
   const closeSettings = useLayoutStore(s => s.closeSettings)
   const newProjectOpen = useLayoutStore(s => s.newProjectOpen)
@@ -111,38 +113,53 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // 底部工具窗口的停靠位置：宿主侧栏被收起时自动回退成「底部全宽」，避免面板消失
+  const dockSide = bottomPanelOpen && sidebarOpen && bottomDock === 'sidebar'
+  const dockAgent = bottomPanelOpen && aiPanelOpen && bottomDock === 'agent'
+  const dockFull = bottomPanelOpen && !dockSide && !dockAgent
+
   return (
     <div className="flex flex-col w-full h-full overflow-hidden">
       {/* 标题栏 */}
       <TitleBar />
 
       {/*
-        主体：flex 行 = LeftBar | 纵向PanelGroup | RightBar
-        ┌───┬──────────────────────────────┬───┐
-        │   │  Sidebar | Editor | AIPanel  │   │
-        │ L │──────────────────────────────│ R │
-        │   │     BottomPanel (全宽)        │   │
-        └───┴──────────────────────────────┴───┘
+        主体：flex 行 = LeftBar | PanelGroup | RightBar
+
+        底部工具窗口（任务 / 日志 / 模型调用）默认停靠在「项目结构」侧栏下方，
+        也可切到 Agent 面板下方，或铺满底部全宽 —— 不再遮挡中间的编辑区。
       */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* 左侧工具窗口栏（全高，包括底部面板区域） */}
+        {/* 左侧工具窗口栏（全高） */}
         <LeftToolWindowBar />
 
-        {/* 纵向 PanelGroup：上层主区域 + 下层底部面板 */}
+        {/* 纵向 PanelGroup：仅当底部面板选择「底部全宽」停靠时才出现下层 */}
         <PanelGroup orientation="vertical" className="flex-1">
 
           {/* 上层：侧边栏 | 编辑区 | AI 面板（水平分割） */}
-          <Panel id="top" defaultSize={75} minSize={30}>
+          <Panel id="top" defaultSize={dockFull ? 72 : 100} minSize={30}>
             <PanelGroup orientation="horizontal" className="flex-1 h-full">
 
-              {/* 左侧边栏 */}
+              {/* 左侧边栏（底部面板停靠此列时，内部再上下分割） */}
               {sidebarOpen && (
                 <>
                   <Panel id="sidebar" defaultSize={20} minSize={10}>
-                    <ErrorBoundary fallbackLabel={t('sidebarRenderError')}>
-                      <Sidebar />
-                    </ErrorBoundary>
+                    <PanelGroup orientation="vertical" className="flex-1 h-full">
+                      <Panel id="sidebar-main" defaultSize={62} minSize={20}>
+                        <ErrorBoundary fallbackLabel={t('sidebarRenderError')}>
+                          <Sidebar />
+                        </ErrorBoundary>
+                      </Panel>
+                      {dockSide && (
+                        <>
+                          <PanelResizeHandle />
+                          <Panel id="bottom-docked-sidebar" defaultSize={38} minSize={15}>
+                            <BottomPanel />
+                          </Panel>
+                        </>
+                      )}
+                    </PanelGroup>
                   </Panel>
                   <PanelResizeHandle />
                 </>
@@ -155,28 +172,44 @@ export default function App() {
                 </ErrorBoundary>
               </Panel>
 
-              {/* 右侧面板（Agent 对话 / AI 输出） */}
+              {/* 右侧面板（Agent 对话 / AI 输出；底部面板停靠此列时上下分割） */}
               {aiPanelOpen && (
                 <>
                   <PanelResizeHandle />
                   <Panel id="ai-panel" defaultSize={20} minSize={10}>
-                    <ErrorBoundary fallbackLabel={t('aiPanelRenderError')}>
-                      {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
-                    </ErrorBoundary>
+                    <PanelGroup orientation="vertical" className="flex-1 h-full">
+                      <Panel id="ai-main" defaultSize={62} minSize={20}>
+                        <ErrorBoundary fallbackLabel={t('aiPanelRenderError')}>
+                          {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
+                        </ErrorBoundary>
+                      </Panel>
+                      {dockAgent && (
+                        <>
+                          <PanelResizeHandle />
+                          <Panel id="bottom-docked-agent" defaultSize={38} minSize={15}>
+                            <BottomPanel />
+                          </Panel>
+                        </>
+                      )}
+                    </PanelGroup>
                   </Panel>
                 </>
               )}
             </PanelGroup>
           </Panel>
 
-          {/* 下层：底部面板（铺满整个 PanelGroup 宽度）— 始终挂载，面板控制显隐 */}
-          <PanelResizeHandle />
-          <Panel id="bottom" defaultSize={25} minSize={8}>
-            <BottomPanel />
-          </Panel>
+          {/* 下层：底部面板铺满全宽（仅「横跨底部全宽」停靠时渲染） */}
+          {dockFull && (
+            <>
+              <PanelResizeHandle />
+              <Panel id="bottom" defaultSize={28} minSize={8}>
+                <BottomPanel />
+              </Panel>
+            </>
+          )}
         </PanelGroup>
 
-        {/* 右侧工具窗口栏（全高，包括底部面板区域） */}
+        {/* 右侧工具窗口栏（全高） */}
         <RightToolWindowBar />
       </div>
 

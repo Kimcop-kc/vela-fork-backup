@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ChevronRight, ChevronDown, RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree } from 'lucide-react'
+import { ChevronRight, ChevronDown, RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, Download } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
 import { useDraftStore } from '../../../stores/draft-store'
@@ -144,9 +144,19 @@ export default function ProjectTree() {
         <span className="font-semibold text-xs truncate" style={{ color: 'var(--color-text)' }}>
           {currentProject.name}
         </span>
-        <Button variant="ghost" size="icon" onClick={() => refreshAll()} title={t('common.refresh')}>
-          <RefreshCw size={12} />
-        </Button>
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => useLayoutStore.getState().openExport()}
+            title={t('manuscript.exportBookDesc')}
+          >
+            <Download size={12} />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => refreshAll()} title={t('common.refresh')}>
+            <RefreshCw size={12} />
+          </Button>
+        </div>
       </div>
 
       {/* 1. 小说配置 */}

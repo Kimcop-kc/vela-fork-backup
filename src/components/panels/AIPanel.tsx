@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { useLLMStore } from '../../stores/llm-store'
+import { useProjectStore } from '../../stores/project-store'
+import { skillRegistry } from '../../services/agent/skill-registry'
 import AgentHeader from './agent/AgentHeader'
 import AgentConversation from './agent/AgentConversation'
 
@@ -16,6 +18,13 @@ export default function AIPanel() {
   useEffect(() => {
     if (!loaded) init()
   }, [init, loaded])
+
+  // 确保 Skill 已加载：技能列表与斜杠命令不应依赖「新建对话」触发。
+  // 项目级 Skill 在 <项目>/.vela/skills 下，所以项目一换就得重扫一遍。
+  const projectPath = useProjectStore(s => s.currentProject?.path ?? '')
+  useEffect(() => {
+    skillRegistry.loadAll().catch(e => console.warn('[Skills] 加载失败:', e))
+  }, [projectPath])
 
   return (
     <div

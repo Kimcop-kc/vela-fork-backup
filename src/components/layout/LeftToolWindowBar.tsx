@@ -1,6 +1,6 @@
 import {
   FolderOpen, BookOpen, Users,
-  Home, Zap, ScrollText, Cpu,
+  Home, Zap, ScrollText, Cpu, Library,
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -27,14 +27,16 @@ export default function LeftToolWindowBar() {
   const sidebarActivities: Array<{ id: SidebarView; icon: typeof FolderOpen; label: string }> = [
     { id: 'project', icon: FolderOpen, label: t('activityBar.project') },
     { id: 'knowledge', icon: BookOpen, label: t('activityBar.knowledge') },
+    { id: 'books', icon: Library, label: t('activityBar.books') },
     { id: 'characters', icon: Users, label: t('activityBar.characters') },
   ]
 
   // Bottom panel tabs
   const bottomTabs: Array<{ id: BottomTab; icon: typeof Zap; label: string }> = [
     { id: 'tasks', icon: Zap, label: t('statusBar.tasksLabel') },
-    { id: 'log', icon: ScrollText, label: t('bottomPanel.tabs.log') },
-    { id: 'models', icon: Cpu, label: t('bottomPanel.tabs.models') },
+    // 底栏标签文案维护在 panels 命名空间下，这里显式指定 ns，避免回退成原始 key
+    { id: 'log', icon: ScrollText, label: t('bottomPanel.tabs.log', { ns: 'panels' }) },
+    { id: 'models', icon: Cpu, label: t('bottomPanel.tabs.models', { ns: 'panels' }) },
   ]
 
   /** Home 按钮是否激活 */

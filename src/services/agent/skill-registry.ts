@@ -13,7 +13,15 @@
 import i18n from '../../i18n'
 import { ipc } from '../ipc-client'
 import { useProjectStore } from '../../stores/project-store'
+import type { SkillOrigin } from '../../shared/ipc-channels'
 import { toolRegistry, type AgentTool } from './tool-registry'
+import {
+  applySkillTemplate,
+  buildSkillArgs,
+  normalizeSkillInputs,
+  skillInputType,
+  type SkillInputField,
+} from './skill-inputs'
 
 const t = (key: string, opts?: Record<string, unknown>) => i18n.t(key, { ns: 'panels', ...opts })
 
@@ -40,6 +48,14 @@ export interface SkillMetadata {
   argumentHint?: string
   /** 是否可由模型自动调用 */
   userInvocable?: boolean
+  /**
+   * 输入参数 schema。
+   * 声明后界面按 schema 生成表单，Agent 也按同一份 schema 收集参数；
+   * 未声明时沿用单个自由文本框（${args}）。
+   */
+  inputs?: SkillInputField[]
+  /** 从外部包安装时的来源标记（.vela-source.json），手写 Skill 没有 */
+  origin?: SkillOrigin
 }
 
 /** 加载后的 Skill */
@@ -54,12 +70,20 @@ export interface LoadedSkill {
   baseDir: string
   /** SKILL.md 文件路径 */
   filePath: string
+  /** 是否启用（停用后不注册为 Agent 工具，也不参与 / 调用与技能方法替换） */
+  enabled: boolean
 }
 
 // ===== Skill Registry =====
 
 class SkillRegistryImpl {
   private skills: Map<string, LoadedSkill> = new Map()
+
+  /** 已停用的 Skill 名 */
+  private disabled: Set<string> = new Set()
+
+  /** 变更订阅者（供界面刷新） */
+  private listeners: Set<() => void> = new Set()
 
   /** 注册一个 Skill */
   register(skill: LoadedSkill): void {
@@ -74,6 +98,70 @@ class SkillRegistryImpl {
   /** 列出所有 Skill */
   listAll(): LoadedSkill[] {
     return Array.from(this.skills.values())
+  }
+
+  /** 只列出已启用的 Skill */
+  listEnabled(): LoadedSkill[] {
+    return this.listAll().filter(s => s.enabled)
+  }
+
+  /** Skill 是否启用（未加载视为未启用） */
+  isEnabled(name: string): boolean {
+    return this.skills.get(name)?.enabled ?? false
+  }
+
+  /** 启用 / 停用某个 Skill，并持久化到 ~/.vela/skills-state.json */
+  async setEnabled(name: string, enabled: boolean): Promise<void> {
+    if (enabled) this.disabled.delete(name)
+    else this.disabled.add(name)
+    this.applyEnabledFlags()
+    try {
+      await ipc.invoke('skill:set-disabled', Array.from(this.disabled))
+    } catch {
+      // 状态落盘失败不影响本次会话
+    }
+    this.registerToToolRegistry()
+    this.notify()
+  }
+
+  /** 订阅 Skill 变更（返回取消订阅函数） */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
+
+  /** 通知订阅者 Skill 列表已变化 */
+  private notify(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener()
+      } catch {
+        // 单个订阅者异常不影响其它订阅者
+      }
+    }
+  }
+
+  /** 把停用状态套用到已加载的 Skill 上 */
+  private applyEnabledFlags(): void {
+    for (const skill of this.skills.values()) {
+      skill.enabled = !this.disabled.has(skill.metadata.name)
+    }
+  }
+
+  /** 从主进程读取停用列表并套用 */
+  private async loadDisabledState(): Promise<void> {
+    try {
+      const state = await ipc.invoke('skill:get-disabled')
+      this.disabled = new Set(state.disabled ?? [])
+    } catch {
+      this.disabled = new Set()
+    }
+    this.applyEnabledFlags()
+  }
+
+  /** 重新加载全部 Skill（磁盘内容变化后调用） */
+  async reload(): Promise<void> {
+    await this.loadAll()
   }
 
   /** 按来源列出 */
@@ -111,7 +199,8 @@ class SkillRegistryImpl {
           const result = await ipc.invoke('fs:read-file', skillFile)
           if (!result.success) continue
 
-          const skill = parseSkillMd(result.content, entry.name, source, entry.path, skillFile)
+          const origin = await readSkillOrigin(`${entry.path}/.vela-source.json`)
+          const skill = parseSkillMd(result.content, entry.name, source, entry.path, skillFile, origin)
           if (skill) {
             this.register(skill)
             count++
@@ -157,10 +246,14 @@ class SkillRegistryImpl {
       }
     }
 
-    // 将所有 Skill 注册为 Agent Tool
+    // 读取停用状态并套用
+    await this.loadDisabledState()
+
+    // 将所有 Skill 注册为 Agent Tool（停用的会被跳过）
     this.registerToToolRegistry()
 
-    console.log(`[Skills] 共加载 ${this.size} 个 Skill`)
+    this.notify()
+    console.log(`[Skills] 共加载 ${this.size} 个 Skill（启用 ${this.listEnabled().length} 个）`)
   }
 
   /**
@@ -170,32 +263,55 @@ class SkillRegistryImpl {
     // 先清理旧的 Skill Tool
     toolRegistry.unregisterBySource('skill')
 
-    for (const skill of this.listAll()) {
+    for (const skill of this.listEnabled()) {
+      const inputFields = skill.metadata.inputs ?? []
+
+      // 声明了 inputs 的 Skill：每个字段单独暴露给模型
+      const properties: Record<string, { type: string; description: string; enum?: string[] }> = {}
+      const required: string[] = []
+      for (const field of inputFields) {
+        const type = skillInputType(field)
+        properties[field.name] = {
+          type: type === 'number' ? 'number' : type === 'boolean' ? 'boolean' : 'string',
+          description: field.description ?? field.label ?? field.name,
+        }
+        if (type === 'select' && field.options?.length) {
+          properties[field.name].enum = field.options.map(option => option.value)
+        }
+        if (field.required) required.push(field.name)
+      }
+      // 没声明 inputs 的老 Skill：保留原来的自由 args
+      if (inputFields.length === 0) {
+        properties.args = {
+          type: 'string',
+          description: skill.metadata.argumentHint ?? t('agent.skills.optionalArgs'),
+        }
+      }
+
       const agentTool: AgentTool = {
         name: `skill__${skill.metadata.name}`,
         description: skill.metadata.description + (skill.metadata.whenToUse ? ` — ${skill.metadata.whenToUse}` : ''),
         source: 'skill',
         inputSchema: {
           type: 'object',
-          properties: {
-            args: {
-              type: 'string',
-              description: skill.metadata.argumentHint ?? t('agent.skills.optionalArgs'),
-            },
-          },
+          properties,
+          ...(required.length > 0 ? { required } : {}),
         },
         requiresConfirmation: false,
         isReadOnly: true,
         userFacingName: skill.metadata.displayName ?? skill.metadata.name,
         execute: async (toolArgs) => {
-          const userArgs = (toolArgs.args as string) ?? ''
-          // 变量替换
-          let content = skill.content
-          if (userArgs) {
-            content = content.replace(/\$\{args\}/g, userArgs)
-            content = content.replace(/\$1/g, userArgs)
+          const values: Record<string, string> = {}
+          for (const field of inputFields) {
+            const value = toolArgs[field.name]
+            if (value === undefined || value === null) continue
+            values[field.name] = String(value)
           }
-          content = content.replace(/\$\{SKILL_DIR\}/g, skill.baseDir)
+          const freeArgs = typeof toolArgs.args === 'string' ? toolArgs.args : ''
+          const args = freeArgs || buildSkillArgs(inputFields, values)
+
+          let content = applySkillTemplate(skill.content, { values, args })
+          content = content.replace(/\$\{SKILL_DIR\}/g, () => skill.baseDir)
 
           return {
             success: true,
@@ -227,7 +343,9 @@ export const BUILTIN_SKILL_NAMES = {
 
 /** 按名读取 Skill 内容；未加载时返回 undefined，调用方应回退到内置兜底方法 */
 export function getSkillContent(name: string): string | undefined {
-  return skillRegistry.get(name)?.content
+  const skill = skillRegistry.get(name)
+  if (!skill || !skill.enabled) return undefined
+  return skill.content
 }
 
 /** Skill 是否由用户/项目自定义（用于判断「可替换」是否已生效） */
@@ -260,6 +378,7 @@ function parseSkillMd(
   source: SkillSource,
   baseDir: string,
   filePath: string,
+  origin?: SkillOrigin,
 ): LoadedSkill | null {
   // 解析 frontmatter
   const fmMatch = raw.match(/^---\s*\n([\s\S]*?)\n---\s*\n/)
@@ -277,9 +396,17 @@ function parseSkillMd(
       const key = kvMatch[1].trim()
       let val: unknown = kvMatch[2].trim()
 
-      // 解析数组 [a, b, c]
-      if (typeof val === 'string' && val.startsWith('[') && val.endsWith(']')) {
-        val = val.slice(1, -1).split(',').map(s => s.trim()).filter(Boolean)
+      // 解析数组 [a, b, c]；inputs 这类结构化声明用单行 JSON
+      if (typeof val === 'string' && (val.startsWith('[') || val.startsWith('{'))) {
+        const raw = val
+        try {
+          val = JSON.parse(raw)
+        } catch {
+          // 不是合法 JSON，退回原来的逗号分隔数组写法
+          if (raw.startsWith('[') && raw.endsWith(']')) {
+            val = raw.slice(1, -1).split(',').map(s => s.trim()).filter(Boolean)
+          }
+        }
       }
       // 解析布尔值
       if (val === 'true') val = true
@@ -298,6 +425,8 @@ function parseSkillMd(
     allowedTools: frontmatter['allowed-tools'] as string[],
     argumentHint: frontmatter['argument-hint'] as string,
     userInvocable: frontmatter['user-invocable'] !== false,
+    inputs: normalizeSkillInputs(frontmatter['inputs']),
+    origin,
   }
 
   return {
@@ -306,6 +435,30 @@ function parseSkillMd(
     source,
     baseDir,
     filePath,
+    enabled: true,
+  }
+}
+
+/** 读取 Skill 目录下的来源标记文件（没有或格式不对就当作手写 Skill） */
+async function readSkillOrigin(filePath: string): Promise<SkillOrigin | undefined> {
+  try {
+    const exists = await ipc.invoke('fs:check-exists', filePath)
+    if (!exists) return undefined
+    const result = await ipc.invoke('fs:read-file', filePath)
+    if (!result.success) return undefined
+    const parsed = JSON.parse(result.content) as Record<string, unknown>
+    if (!parsed || typeof parsed !== 'object') return undefined
+    return {
+      kind: typeof parsed.kind === 'string' ? parsed.kind : undefined,
+      label: typeof parsed.label === 'string' ? parsed.label : undefined,
+      url: typeof parsed.url === 'string' ? parsed.url : null,
+      ref: typeof parsed.ref === 'string' ? parsed.ref : null,
+      subdir: typeof parsed.subdir === 'string' ? parsed.subdir : null,
+      version: typeof parsed.version === 'string' ? parsed.version : null,
+      importedAt: typeof parsed.importedAt === 'string' ? parsed.importedAt : undefined,
+    }
+  } catch {
+    return undefined
   }
 }
 
@@ -526,6 +679,7 @@ category 取 voice / syntax / rhythm / dialogue / lexicon / imagery / punctuatio
       source: 'builtin',
       baseDir: '',
       filePath: `builtin://${metadata.name}`,
+      enabled: true,
     })
   }
 }

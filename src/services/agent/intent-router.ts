@@ -84,8 +84,8 @@ const BUILTIN_COMMANDS: SlashCommand[] = [
 export function getAllSlashCommands(): SlashCommand[] {
   const commands: SlashCommand[] = [...BUILTIN_COMMANDS]
 
-  // 把所有 Skill 也注册为 / 命令
-  for (const skill of skillRegistry.listAll()) {
+  // 把所有已启用的 Skill 也注册为 / 命令
+  for (const skill of skillRegistry.listEnabled()) {
     if (skill.metadata.userInvocable !== false) {
       commands.push({
         name: skill.metadata.name,

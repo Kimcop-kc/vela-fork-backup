@@ -718,7 +718,7 @@ namespace:action
 | `config:` | 全局配置 | `config:get`, `config:set` |
 | `project:` | 项目管理 | `project:create`, `project:open` |
 | `fs:` | 文件系统 | `fs:read-file`, `fs:write-file` |
-| `llm:` | LLM 调用 | `llm:generate`, `llm:generate-stream` |
+| `llm:` | LLM 调用 / 多模型管理 | `llm:generate`, `llm:generate-stream`, `llm:set-purpose-model` |
 | `db:` | 数据库 | `db:upsert-chapter`, `db:get-all-chapters` |
 | `kb:` | 知识库 | `kb:import-document`, `kb:search` |
 | `dialog:` | 原生对话框 | `dialog:select-folder` |

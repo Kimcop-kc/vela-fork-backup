@@ -13,7 +13,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import * as lancedb from '@lancedb/lancedb'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
-import { chunkText, generateEmbeddings } from './embedding'
+import { chunkText, generateEmbeddings, joinChunkTexts } from './embedding'
 import {
   addChunks,
   removeDocument as removeDocFromStore,
@@ -22,6 +22,7 @@ import {
   getStats as storeGetStats,
   migrateFromJSON,
   getChunksWithoutVectors as storeGetChunksWithoutVectors,
+  getChunksByDoc as storeGetChunksByDoc,
 } from './vector-store'
 
 // ===== 迁移状态跟踪 =====
@@ -410,4 +411,32 @@ export async function searchKnowledgeFTS(
 ): Promise<Array<{ text: string; score: number; fileName: string }>> {
   await ensureMigration(projectPath)
   return storeSearchWithScope(projectPath, query, undefined, topK, chapterScope)
+}
+
+/**
+ * 按知识库文档 id 取回整篇正文。
+ *
+ * 拆书场景里每一章是一条文档（docId 即章节记录里的 docId），
+ * 正文由该文档的所有文本块按 chunkIndex 顺序拼接而成。
+ */
+export async function getDocumentText(
+  docId: string,
+  projectPath: string,
+): Promise<{ success: boolean; text?: string; fileName?: string; chunkCount?: number; error?: string }> {
+  try {
+    await ensureMigration(projectPath)
+    const chunks = await storeGetChunksByDoc(projectPath, docId)
+    if (chunks.length === 0) {
+      return { success: false, error: '未在知识库中找到该文档' }
+    }
+    return {
+      success: true,
+      text: joinChunkTexts(chunks.map(c => c.text)),
+      fileName: chunks[0].fileName,
+      chunkCount: chunks.length,
+    }
+  } catch (error) {
+    console.error('[Vela KB] 读取文档正文失败:', error)
+    return { success: false, error: String(error) }
+  }
 }

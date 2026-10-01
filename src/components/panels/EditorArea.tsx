@@ -19,6 +19,7 @@ import StyleGuideView from '../editor/StyleGuideView'
 import ThreeWayMerge from '../editor/ThreeWayMerge'  // 保留引用以防其他入口使用
 import WelcomePage from '../pages/WelcomePage'
 import KnowledgeOverview from '../pages/KnowledgeOverview'
+import BooksOverview from '../pages/BooksOverview'
 import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { useLayoutStore } from '../../stores/layout-store'
@@ -406,6 +407,11 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   // 侧栏为「知识库」时，中间区域固定展示向量数据库查询界面（跳过 Tab 系统）
   if (sidebarView === 'knowledge') {
     return <KnowledgeOverview />
+  }
+
+  // 侧栏为「拆书」时，中间区域固定展示拆书详情（章节清单 + 本书检索）
+  if (sidebarView === 'books') {
+    return <BooksOverview />
   }
 
   // 未打开项目时显示欢迎页

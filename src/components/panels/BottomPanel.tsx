@@ -2,11 +2,19 @@ import { useState, useRef, useEffect } from 'react'
 import {
   Trash2, ChevronsDown, Loader2, CheckCircle2, XCircle, Clock,
   Play, X, ChevronDown, ChevronRight, Zap, RefreshCw,
+  PanelLeft, PanelRight, PanelBottom,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useLayoutStore } from '../../stores/layout-store'
+import { useLayoutStore, type BottomDock } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import { Button } from '../ui/Button'
+
+/** 底部工具窗口的停靠位置选项（图标 + i18n key） */
+const DOCK_OPTIONS: Array<{ id: BottomDock; icon: typeof PanelLeft; key: string }> = [
+  { id: 'sidebar', icon: PanelLeft, key: 'sidebar' },
+  { id: 'agent', icon: PanelRight, key: 'agent' },
+  { id: 'full', icon: PanelBottom, key: 'full' },
+]
 
 /** 下方工具窗口 */
 export default function BottomPanel() {
@@ -14,6 +22,8 @@ export default function BottomPanel() {
   const bottomPanelOpen = useLayoutStore(s => s.bottomPanelOpen)
   const bottomTab = useLayoutStore(s => s.bottomTab)
   const toggleBottomPanel = useLayoutStore(s => s.toggleBottomPanel)
+  const bottomDock = useLayoutStore(s => s.bottomDock)
+  const setBottomDock = useLayoutStore(s => s.setBottomDock)
   const activeRuns = useWorkflowStore(s => s.activeRuns)
 
   const TAB_LABELS: Record<string, string> = {
@@ -86,10 +96,31 @@ export default function BottomPanel() {
           )}
         </div>
 
-        {/* 右侧：关闭按钮 */}
-        <button onClick={toggleBottomPanel} title={t('common.closePanel')} className="icon-btn" style={{ width: 18, height: 18 }}>
-          <X size={12} strokeWidth={1.5} />
-        </button>
+        {/* 右侧：停靠位置切换 + 关闭按钮 */}
+        <div className="flex items-center gap-0.5">
+          {DOCK_OPTIONS.map(({ id, icon: Icon, key }) => {
+            const isActive = bottomDock === id
+            return (
+              <button
+                key={id}
+                onClick={() => setBottomDock(id)}
+                title={t('bottomPanel.dock.' + key)}
+                className="icon-btn"
+                style={{
+                  width: 18,
+                  height: 18,
+                  color: isActive ? 'var(--color-accent)' : undefined,
+                  backgroundColor: isActive ? 'rgba(var(--color-accent-rgb), 0.12)' : undefined,
+                }}
+              >
+                <Icon size={11} strokeWidth={isActive ? 2 : 1.5} />
+              </button>
+            )
+          })}
+          <button onClick={toggleBottomPanel} title={t('common.closePanel')} className="icon-btn ml-1" style={{ width: 18, height: 18 }}>
+            <X size={12} strokeWidth={1.5} />
+          </button>
+        </div>
       </div>
 
       {/* 内容区 */}

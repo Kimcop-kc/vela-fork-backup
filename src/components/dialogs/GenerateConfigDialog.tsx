@@ -26,7 +26,8 @@ interface Props {
 /** AI 生成配置对话框 — 用户输入脑洞，AI 自动生成所有配置字段 */
 export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: Props) {
   const { t } = useTranslation('dialogs')
-  const defaultModelId = useLLMStore(s => s.defaultModelId)
+  // 按用途解析模型：用途绑定 / 默认模型任一可用即视为已配置
+  const resolveModelId = useLLMStore(s => s.resolveModelId)
   // ✅ 用 getState() 获取 action，不订阅 workflow store 的 globalLogs 高频更新
   const addLog = useWorkflowStore.getState().addLog
   const startWorkflow = useWorkflowStore.getState().startWorkflow
@@ -68,7 +69,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
 
   const handleGenerate = async () => {
     if (!idea.trim() || isSubmittingRef.current) return
-    if (!defaultModelId) {
+    if (!resolveModelId('generate_global_config')) {
       addLog('error', t('generateConfig.needModel'))
       return
     }

@@ -49,6 +49,10 @@ export function streamRehearsal(
       listeners.push(ipc.on('llm:stream-error', data => {
         if (data.requestId === requestId) finish(new Error(data.error || 'GENERATION_FAILED'))
       }))
+      // 输出被长度上限截断：彩排不做续写，直接按生成失败处理，避免界面一直等待回调
+      listeners.push(ipc.on('llm:stream-truncated', data => {
+        if (data.requestId === requestId) finish(new Error('OUTPUT_TRUNCATED'))
+      }))
       signal.addEventListener('abort', abort, { once: true })
       timer = setTimeout(() => {
         cancelled = true
@@ -58,6 +62,7 @@ export function streamRehearsal(
       if (signal.aborted) { abort(); return }
       void ipc.invoke('llm:generate-stream', requestId, {
         modelId, messages, maxTokens: options.maxTokens ?? 16384, thinking: false,
+        purpose: 'chapter_rehearsal',
         ...(options.structured ? { responseFormat: { type: 'json_object' } } : {}),
       })
         .then(result => {

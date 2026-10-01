@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCharacterFilterDirective,
   buildSegmentDirective,
+  buildContinuationDirective,
   callSegmentWithShrink,
   callWithShrink,
   chunkArray,
   clampToTokenBudget,
+  dropContinuationOverlap,
   estimateTokens,
   extractJsonFragment,
+  generateWithContinuation,
   halveText,
   isFilledValue,
   isOutputLengthError,
@@ -275,5 +278,54 @@ describe('切段预算与强制对半切分', () => {
     expect(halves.join('')).toBe(single)
     // 已经无法再切时返回单元素数组
     expect(halveText('一')).toHaveLength(1)
+  })
+})
+
+describe('通用续写（截断后自动补齐）', () => {
+  it('首轮未截断时只调用一次', async () => {
+    let calls = 0
+    const outcome = await generateWithContinuation(async () => {
+      calls++
+      return { text: '完整结果', truncated: false }
+    })
+    expect(calls).toBe(1)
+    expect(outcome).toEqual({ text: '完整结果', rounds: 1, truncated: false })
+  })
+
+  it('被截断时把已产出内容回传给下一轮并拼接', async () => {
+    const seen: Array<{ round: number; accumulated: string; tail: string }> = []
+    const outcome = await generateWithContinuation(async (ctx) => {
+      seen.push({ round: ctx.round, accumulated: ctx.accumulated, tail: ctx.tail })
+      return ctx.round === 0
+        ? { text: '前半段', truncated: true }
+        : { text: '后半段', truncated: false }
+    })
+    expect(outcome.text).toBe('前半段后半段')
+    expect(outcome.rounds).toBe(2)
+    expect(outcome.truncated).toBe(false)
+    // 第二轮拿到的是首轮结果作为衔接上下文
+    expect(seen[1]).toEqual({ round: 1, accumulated: '前半段', tail: '前半段' })
+  })
+
+  it('达到最大轮数仍被截断时如实标记，不会无限续写', async () => {
+    let calls = 0
+    const outcome = await generateWithContinuation(async () => {
+      calls++
+      return { text: `第${calls}段`, truncated: true }
+    }, { maxRounds: 3 })
+    expect(calls).toBe(3)
+    expect(outcome.rounds).toBe(3)
+    expect(outcome.truncated).toBe(true)
+    expect(outcome.text).toBe('第1段第2段第3段')
+  })
+
+  it('默认拼接会去掉模型重抄的重复衔接内容', () => {
+    expect(dropContinuationOverlap('主角推开沉重的木门，', '主角推开沉重的木门，他看见了尸体')).toBe('他看见了尸体')
+    // 重叠过短（少于 8 字符）时不处理，避免误删正常内容
+    expect(dropContinuationOverlap('abc', 'abc')).toBe('abc')
+  })
+
+  it('续写指令带上轮次且不含上一轮正文（正文由 assistant 消息承载）', () => {
+    expect(buildContinuationDirective(2)).toContain('2')
   })
 })

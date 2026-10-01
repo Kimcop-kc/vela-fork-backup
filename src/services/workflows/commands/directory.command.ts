@@ -49,9 +49,9 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
 
     callbacks.log(i18n.t('directory.generatingBlueprintsRange', { ns: 'commands', from: startChapter, to: endChapter }))
 
-    // 从当前默认模型获取 maxTokens，动态计算每批次章节数（分段生成：单批只请求能完整输出的章节数）
+    // 按「章节蓝图」用途取模型（未绑定时回落默认模型），用它的 maxTokens 动态计算每批次章节数
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
-    const defaultModel = llmStore.models.find(m => m.id === llmStore.defaultModelId)
+    const defaultModel = llmStore.modelForPurpose('chapter_blueprint')
     const budgets = resolveGenerationBudgets(defaultModel?.maxTokens)
     const outputBudget = Math.floor(budgets.outputTokens * 0.6)  // 预留 40% 给 prompt + 思考
     const tokensPerChapter = 600
@@ -122,7 +122,9 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
         // 这不是致命错误，按「本批太大」处理，交给下面的缩批逻辑换成更小的批次重试。
         let lengthLimitError: Error | null = null
         try {
-          resultText = await this.callLLM(
+          // 输出撞上长度上限时自动续写补齐：本批范围不变，只是把没写完的章节接着补出来，
+          // 避免整批重来（重来通常还会在同一处被截断）。
+          resultText = await this.callLLMWithContinuation(
             prompt,
             systemRole,
             callbacks,

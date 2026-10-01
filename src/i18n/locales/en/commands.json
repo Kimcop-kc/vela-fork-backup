@@ -276,6 +276,14 @@
     "chapterRefineTitle": "🔧 Refine — Ch.{{chapter}} {{title}}",
     "chapterRefineStepName": "Refine",
     "chapterRefineStepDesc": "Elevate draft to master quality, save refinement and open merge view",
+    "skillInvokeTitle": "🧩 Skill — {{skill}}",
+    "skillInvokeStepName": "Invoke skill: {{skill}}",
+    "skillInvokeStepDesc": "Apply this skill's method to the current chapter text; the result goes to the AI output panel",
+    "skillPipelineTitle": "🧩 Pipeline — {{name}}",
+    "skillPipelineStepName": "Step {{index}}: {{skill}}",
+    "skillPipelineStepDescChapter": "Input: this chapter's text",
+    "skillPipelineStepDescPrevious": "Input: previous step's output",
+    "skillPipelineStepDone": "Step {{index}} complete, {{chars}} characters of output",
     "chapterReviewFixTitle": "🔧 Review Fix — Ch.{{chapter}} {{title}}",
     "chapterReviewFixStepName": "Review-driven refinement",
     "chapterReviewFixStepDesc": "Precisely fix issues based on review report via Command",
@@ -404,7 +412,14 @@
       "shrinkLog": "⚠️ Chapters {{from}}–{{to}} came back incomplete; retrying with a smaller range…",
       "chunkLog": "Segmented generation: segment {{index}}/{{total}}…",
       "chunkDoneLog": "Segmented generation finished: {{total}} segments merged into one result.",
-      "chunkFallbackLog": "Segment {{index}} failed; kept the other {{done}} segments: {{error}}"
+    "chunkFallbackLog": "Segment {{index}} failed; kept the other {{done}} segments: {{error}}",
+    "continuationHeader": "[Continuation] The previous output was cut off by the length limit; this is continuation run {{round}}.",
+    "continuationBody": "Continue right after the ending above: do not repeat what was already produced, do not start over, do not explain - output only the remaining content.",
+    "continuationLog": "✂️ Output hit the length limit; continuing (round {{round}})…",
+    "continuationDoneLog": "✂️ Continuation finished: {{rounds}} round(s), final length {{length}} characters.",
+    "continuationExhaustedLog": "⚠️ Reached the maximum continuation rounds ({{rounds}}); the result may still be incomplete."
+,
+    "outputIncomplete": "The model hit its output length limit and returned an incomplete result. Nothing has been committed; split the work or raise the output limit."
     },
   "review": {
     "chapterSource": "Chapter {{chapter}}",
@@ -535,5 +550,15 @@
     "tabName": "Ch. {{chapter}} · De-AI revision",
     "completed": "Produced revision v{{version}} ({{length}} characters) for review; confirm it in the diff view before adopting.",
     "baseDraftMissing": "⚠️ Base draft not found; the revision was not saved."
+  },
+  "invokeSkill": {
+    "noSkill": "No skill content available (the skill may be disabled)",
+    "systemPrompt": "You are executing the writing method \"{{skill}}\". Apply it strictly to the text the user provides and output the result directly: do not restate the source, do not explain your process, do not add anything unrelated to the task.",
+    "started": "Invoking skill: {{skill}}",
+    "taskHeader": "[Task] {{task}}",
+    "argsBlock": "[Arguments]\n{{args}}",
+    "targetBlock": "[Target text{{part}}]\n{{text}}",
+    "outputRule": "Output the resulting content only.",
+    "partLabel": " (part {{index}}/{{total}})"
   }
 }

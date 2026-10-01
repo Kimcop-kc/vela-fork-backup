@@ -1,5 +1,6 @@
 import type { WorkflowDefinition } from '../../stores/workflow-store'
 import type { DraftMeta } from '../draft-index'
+import type { SkillInputField } from '../agent/skill-inputs'
 import i18n from '../../i18n'
 
 import type { DraftStatus } from '../../shared/draft-status'
@@ -183,6 +184,119 @@ export function createRefineOnlyWorkflow(params: RefineOnlyParams): WorkflowDefi
       },
     ],
     onComplete: { mode: 'open', openResult: async () => { } },
+  }
+}
+
+/** Skill 调用参数：把章节正文交给某个 Skill 处理 */
+export interface SkillInvokeParams {
+  /** Skill 名（日志与统计展示用） */
+  skillName: string
+  /** Skill 方法正文 */
+  skillContent: string
+  /** 调用参数，会替换方法正文里的 ${args} */
+  args?: string
+  /** 按 Skill 的 inputs schema 收集到的结构化参数 */
+  values?: Record<string, string>
+  /** 输入参数 schema（用于把 values 拼成 ${args} 文本） */
+  inputs?: SkillInputField[]
+  /** 目标文本，通常是当前章节正文 */
+  targetText?: string
+  /** 目标说明，如「第 3 章」 */
+  targetLabel?: string
+}
+
+/**
+ * 写章节时调用 Skill：正文按模型预算切段，逐段套用同一套 Skill 方法。
+ * 结果输出到「AI 输出」面板，不自动改写草稿。
+ */
+export function createSkillInvokeWorkflow(params: SkillInvokeParams): WorkflowDefinition {
+  return {
+    type: 'chapter_creation',
+    title: t('workflowDefs.skillInvokeTitle', { skill: params.skillName }),
+    steps: [
+      {
+        name: t('workflowDefs.skillInvokeStepName', { skill: params.skillName }),
+        description: t('workflowDefs.skillInvokeStepDesc'),
+        executor: async (step, context, callbacks) => {
+          const { InvokeSkillCommand } = await import('./commands/invoke-skill.command')
+          const cmd = new InvokeSkillCommand(params)
+          return cmd.execute({ step, context, callbacks })
+        },
+      },
+    ],
+    onComplete: { mode: 'silent' },
+  }
+}
+
+/** 流水线中一步的解析结果：Skill 正文与参数都已就位，可以直接跑 */
+export interface SkillPipelineWorkflowStep {
+  /** Skill 名（日志与统计展示用） */
+  skillName: string
+  /** Skill 方法正文 */
+  skillContent: string
+  /** 自由参数（老 Skill 走这条） */
+  args?: string
+  /** 结构化参数 */
+  values?: Record<string, string>
+  /** 输入参数 schema */
+  inputs?: SkillInputField[]
+  /** 输入来源：chapter=本章正文，previous=上一步的输出 */
+  input: 'chapter' | 'previous'
+}
+
+/** Skill 流水线参数：把多个 Skill 串成一条链，一次跑完 */
+export interface SkillPipelineWorkflowParams {
+  /** 流水线展示名 */
+  pipelineName: string
+  /** 首步输入：当前章节正文 */
+  chapterText: string
+  /** 目标说明（如「第 3 章」），仅用于提示词 */
+  targetLabel?: string
+  steps: SkillPipelineWorkflowStep[]
+}
+
+/**
+ * Skill 流水线工作流。
+ *
+ * 每步 = 一次 Skill 调用，默认把上一步的输出喂给下一步；
+ * 调用方以 stepByStep 方式启动，步与步之间会暂停等待人工确认，
+ * 确认满意再继续下一步，不确认就停在原地。
+ */
+export function createSkillPipelineWorkflow(params: SkillPipelineWorkflowParams): WorkflowDefinition {
+  const pipelineSteps: WorkflowDefinition['steps'] = params.steps.map((pipelineStep, index) => ({
+    name: t('workflowDefs.skillPipelineStepName', { index: index + 1, skill: pipelineStep.skillName }),
+    description: pipelineStep.input === 'chapter'
+      ? t('workflowDefs.skillPipelineStepDescChapter')
+      : t('workflowDefs.skillPipelineStepDescPrevious'),
+    executor: async (step, context, callbacks) => {
+      const { InvokeSkillCommand } = await import('./commands/invoke-skill.command')
+      const previous = context.data['pipeline.previous']
+      const source = pipelineStep.input === 'chapter' || typeof previous !== 'string'
+        ? params.chapterText
+        : previous
+      const cmd = new InvokeSkillCommand({
+        skillName: pipelineStep.skillName,
+        skillContent: pipelineStep.skillContent,
+        args: pipelineStep.args,
+        values: pipelineStep.values,
+        inputs: pipelineStep.inputs,
+        targetText: source,
+        targetLabel: params.targetLabel,
+      })
+      const output = await cmd.execute({ step, context, callbacks })
+      // 供下一步取用；同时按步号留档，方便对照每一步的产出
+      context.data['pipeline.previous'] = output
+      context.data[`pipeline.step.${index + 1}`] = output
+      callbacks.log(t('workflowDefs.skillPipelineStepDone', { index: index + 1, chars: output.length }))
+      return output
+    },
+  }))
+
+  return {
+    type: 'skill_pipeline',
+    title: t('workflowDefs.skillPipelineTitle', { name: params.pipelineName }),
+    steps: pipelineSteps,
+    onComplete: { mode: 'silent' },
   }
 }
 

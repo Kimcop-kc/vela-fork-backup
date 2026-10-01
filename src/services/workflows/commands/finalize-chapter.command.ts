@@ -9,9 +9,11 @@ import { PostProcessPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
 import {
   buildCharacterFilterDirective,
+  buildContinuationDirective,
   buildSegmentDirective,
   callSegmentWithShrink,
   chunkArray,
+  generateWithContinuation,
   halveText,
   isOutputLengthError,
   mergeByKey,
@@ -46,37 +48,54 @@ export interface FinalizeChapterParams {
 async function callLLMForPostProcess(
   prompt: string,
   systemRole: string,
-  callbacks: { appendText: (text: string) => void },
-  options?: { responseFormat?: { type: string } },
+  callbacks: { appendText: (text: string) => void; log?: (text: string) => void },
+  options?: { responseFormat?: { type: string }; maxTokens?: number; maxRounds?: number; purpose?: string },
 ): Promise<string> {
   const llmStore = useLLMStore.getState()
-  if (!llmStore.defaultModelId) throw new Error(t('base.noDefaultModel'))
+  // 按用途解析模型（用途绑定 → 默认模型 → 模型池）
+  if (!llmStore.resolveModelId(options?.purpose ?? 'chapter_finalize')) throw new Error(t('base.noDefaultModel'))
 
-  return new Promise<string>((resolve, reject) => {
+  const { maxRounds, ...streamOptions } = options ?? {}
+
+  // 输出撞上长度上限时保留已产出内容并续写补齐，而不是整段丢弃重试
+  const outcome = await generateWithContinuation(async (ctx) => {
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemRole },
+      { role: 'user', content: prompt },
+    ]
+    if (ctx.round > 0) {
+      callbacks.log?.(t('segmented.continuationLog', { round: ctx.round }))
+      messages.push({ role: 'assistant', content: ctx.tail })
+      messages.push({ role: 'user', content: buildContinuationDirective(ctx.round) })
+    }
     let fullContent = ''
-    llmStore.generateStream(
-      [
-        { role: 'system', content: systemRole },
-        { role: 'user', content: prompt },
-      ],
-      {
-        onChunk: (chunk) => { fullContent += chunk; callbacks.appendText(chunk) },
-        onDone: (text) => {
-          const raw = text || fullContent
-          resolve(stripThinkingTags(raw))
+    let truncated = false
+    await new Promise<void>((resolve, reject) => {
+      llmStore.generateStream(
+        messages,
+        {
+          onChunk: (chunk) => { fullContent += chunk; callbacks.appendText(chunk) },
+          onDone: (text) => { fullContent = text || fullContent; resolve() },
+          onTruncated: (partial) => { fullContent = partial; truncated = true; resolve() },
+          onError: (err) => reject(new Error(err || t('base.streamFailed'))),
         },
-        onError: (err) => reject(new Error(err || t('base.streamFailed'))),
-      },
-      undefined,
-      options,
-    )
-  })
+        undefined,
+        { ...streamOptions, purpose: streamOptions.purpose ?? 'chapter_finalize' },
+      )
+    })
+    return { text: stripThinkingTags(fullContent), truncated }
+  }, { maxRounds })
+
+  if (outcome.rounds > 1) {
+    callbacks.log?.(t('segmented.continuationDoneLog', { rounds: outcome.rounds, length: outcome.text.length }))
+  }
+  return outcome.text
 }
 
-/** 读取当前默认模型的 token 预算，供分段生成使用 */
+/** 读取「章节要点 / 角色卡」用途模型的 token 预算，供分段生成使用 */
 function currentGenerationBudgets() {
   const llmStore = useLLMStore.getState()
-  const model = llmStore.models.find(m => m.id === llmStore.defaultModelId)
+  const model = llmStore.modelForPurpose('chapter_notes')
   return resolveGenerationBudgets(model?.maxTokens)
 }
 
@@ -88,7 +107,13 @@ function parseJSON<T>(text: string): T {
   if (firstBrace !== -1 && lastBrace !== -1) {
     cleanText = cleanText.substring(firstBrace, lastBrace + 1)
   }
-  return JSON.parse(cleanText) as T
+  try {
+    return JSON.parse(cleanText) as T
+  } catch {
+    // 续写若干轮后仍拿不到完整 JSON，通常是输出仍未写完：
+    // 抛出可被 isOutputLengthError 识别的错误，让上层继续按「缩小范围」重试。
+    throw new Error(t('segmented.outputIncomplete'))
+  }
 }
 
 // ===== 后处理步骤构建器 =====
@@ -157,7 +182,8 @@ export function buildFinalizePostProcessSteps(
               .withChapterContent(text)
               .withChapterNumber(chapterNumber)
               .withChapterTitle(chapterTitle)
-            return callLLMForPostProcess(notesBuilder.build() + directive, notesBuilder.getSystemRole(), callbacks)
+            // 显式标注用途：让「章节要点」走「摘要记忆」用途绑定的模型
+            return callLLMForPostProcess(notesBuilder.build() + directive, notesBuilder.getSystemRole(), callbacks, { purpose: 'chapter_notes' })
           }
           notesParts.push(await callSegmentWithShrink(contentChunks[index], chunkBudget, runSegment, mergeChapterNotes))
         }
@@ -314,7 +340,8 @@ export function buildFinalizePostProcessSteps(
             prompt += buildSegmentDirective(callIndex, totalCalls, t('finalize.cardsSegmentHint'))
             prompt += buildCharacterFilterDirective(cards.map(card => String(card.name)))
           }
-          const cardsResult = await callLLMForPostProcess(prompt, cardBuilder.getSystemRole(), callbacks, { responseFormat: { type: 'json_object' } })
+          // 显式标注用途：让「角色卡更新」走「摘要记忆」用途绑定的模型
+          const cardsResult = await callLLMForPostProcess(prompt, cardBuilder.getSystemRole(), callbacks, { responseFormat: { type: 'json_object' }, purpose: 'character_cards' })
           const parsedCards = parseJSON<LLMCardResult>(cardsResult)
           return {
             updates: Array.isArray(parsedCards.updates) ? parsedCards.updates : [],

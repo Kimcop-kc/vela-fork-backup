@@ -580,3 +580,97 @@ export function buildCharacterFilterDirective(names: string[]): string {
   if (names.length === 0) return ''
   return `\n\n${t('segmented.characterFilter', { names: names.join('、') })}`
 }
+
+// ===== 通用续写（撞上输出上限后自动补齐） =====
+
+/** 默认续写轮数：首次生成 + 最多 3 轮续写 */
+export const MAX_CONTINUATION_ROUNDS = 3
+
+/** 续写时回传给模型的结尾片段长度（字符），避免把全部内容塞回 Prompt */
+export const CONTINUATION_TAIL_CHARS = 1200
+
+/** 单轮尝试的上下文 */
+export interface ContinuationAttemptContext {
+  /** 轮次，从 0 开始；0 表示首次生成 */
+  round: number
+  /** 前几轮累计已生成的内容（首次为空串） */
+  accumulated: string
+  /** 已生成内容的结尾片段，供拼进续写指令 */
+  tail: string
+}
+
+/** 续写循环的最终结果 */
+export interface ContinuationOutcome {
+  text: string
+  /** 实际调用轮数 */
+  rounds: number
+  /** 最后一轮是否仍被截断（true 表示结果可能仍不完整） */
+  truncated: boolean
+}
+
+export interface ContinuationOptions {
+  maxRounds?: number
+  /** 每轮结束后的回调，用于写日志或推进度 */
+  onRound?: (info: { round: number; addedChars: number; truncated: boolean }) => void
+  /** 返回 true 时立即停止续写（如用户取消） */
+  isCancelled?: () => boolean
+  /** 自定义拼接；默认按尾部重叠去重后拼接 */
+  merge?: (accumulated: string, next: string) => string
+}
+
+/**
+ * 去掉 next 开头与 accumulated 结尾重复的部分。
+ * 模型续写时经常先把上一轮的结尾重抄一遍再往下写，这里做最大重叠去重。
+ */
+export function dropContinuationOverlap(accumulated: string, next: string): string {
+  if (!accumulated || !next) return next
+  const maxOverlap = Math.min(accumulated.length, next.length, 2000)
+  for (let size = maxOverlap; size >= 8; size--) {
+    if (accumulated.slice(-size) === next.slice(0, size)) return next.slice(size)
+  }
+  return next
+}
+
+/** 取文本结尾片段（按字符数） */
+export function tailOf(text: string, maxChars = CONTINUATION_TAIL_CHARS): string {
+  if (!text || text.length <= maxChars) return text
+  return text.slice(-maxChars)
+}
+
+/**
+ * 通用「生成 → 被截断就续写」循环。
+ *
+ * attempt 每轮调用一次，返回本轮新增文本与是否被长度上限截断；
+ * 某轮没有被截断（或达到 maxRounds）时结束，并把各轮结果拼成完整文本。
+ */
+export async function generateWithContinuation(
+  attempt: (ctx: ContinuationAttemptContext) => Promise<{ text: string; truncated?: boolean }>,
+  options: ContinuationOptions = {},
+): Promise<ContinuationOutcome> {
+  const maxRounds = Math.max(1, options.maxRounds ?? MAX_CONTINUATION_ROUNDS)
+  // 默认拼接：保留已有内容，再接上新一轮去重后的新增部分
+  const merge = options.merge ?? ((acc: string, next: string) => acc + dropContinuationOverlap(acc, next))
+  let accumulated = ''
+  let truncated = false
+  let rounds = 0
+
+  for (let round = 0; round < maxRounds; round++) {
+    if (options.isCancelled?.()) break
+    const result = await attempt({ round, accumulated, tail: tailOf(accumulated) })
+    rounds = round + 1
+    accumulated = round === 0 ? result.text : merge(accumulated, result.text)
+    truncated = result.truncated === true
+    options.onRound?.({ round: rounds, addedChars: result.text.length, truncated })
+    if (!truncated) break
+  }
+
+  return { text: accumulated, rounds, truncated }
+}
+
+/**
+ * 续写指令：配合 messages 形式使用——把上一轮输出作为 assistant 消息回传后，
+ * 追加这条 user 指令要求模型从断点继续，而不是重写。
+ */
+export function buildContinuationDirective(round: number): string {
+  return `---\n${t('segmented.continuationHeader', { round })}\n${t('segmented.continuationBody')}`
+}

@@ -11,8 +11,8 @@
     "embedding": "向量模型",
     "fonts": "字体设置",
     "languageDesc": "切换界面语言",
-    "llmDesc": "配置用于文章生成、改写、摘要的语言模型",
-    "embeddingDesc": "配置用于知识库检索的 Embedding 模型",
+    "llmDesc": "配置模型池，并为生成、精修、摘要等用途分别指定模型",
+    "embeddingDesc": "配置用于知识库检索的 Embedding 模型，并绑定到「向量」用途",
     "proxyDesc": "配置 HTTP / SOCKS5 代理，用于访问受限 API",
     "editorDesc": "字体大小、自动保存等编辑器偏好设置",
     "promptsDesc": "自定义 AI 创作各环节使用的提示词模板",
@@ -43,8 +43,8 @@
     "title": "模型配置",
     "configuredCount": "已配置 {{count}} 个{{label}}",
     "addModel": "添加{{label}}",
-    "addFirstModel": "添加第一个{{label}}",
-    "noModels": "暂无{{label}}配置",
+    "addFirstModel": "添加第一个模型",
+    "noModels": "暂无模型配置",
     "provider": "服务商",
     "modelId": "模型 ID",
     "modelName": "模型标识",
@@ -65,8 +65,6 @@
     "editModel": "编辑",
     "removeModel": "删除",
     "confirmRemove": "确定要删除此模型配置吗？",
-    "noModels": "暂无模型配置",
-    "addFirstModel": "添加第一个模型",
     "newModelConfig": "新建模型配置",
     "editModelName": "编辑：{{name}}",
     "protocol": "调用协议",
@@ -93,6 +91,25 @@
       "proxyType": "代理类型",
       "proxyHost": "主机地址",
       "proxyPort": "端口"
+    },
+    "poolTitle": "模型池",
+    "purposeTitle": "用途绑定",
+    "purposeHint": "先在模型池导入模型，再为每个用途挑选模型；未绑定的用途回落到默认模型。",
+    "purposeEmptyPool": "还没有导入模型。先点击下方「添加」导入模型，再回到这里绑定用途。",
+    "purposeFollowDefault": "跟随默认模型",
+    "purposeEffective": "生效：{{name}}",
+    "purposeNoModel": "⚠️ 暂无可用模型",
+    "purposeBoundMissing": "⚠️ 绑定的模型已失效",
+    "disabled": "已停用",
+    "enableModel": "启用该模型",
+    "disableModel": "停用该模型",
+    "capabilities": "可用用途",
+    "capabilitiesHint": "勾选后，该模型才会出现在对应用途的下拉框里。",
+    "purpose": {
+      "generation": "正文生成",
+      "refinement": "精修审稿",
+      "summary": "摘要记忆",
+      "embedding": "向量嵌入"
     }
   },
   "prompts": {
@@ -132,25 +149,82 @@
     "businessDescription": "如果您对本项目的商业化落地（SaaS 授权）、技术实现细节或 AI 产品方向感兴趣，欢迎随时交流："
   },
   "promptTemplates": {
-    "generate_global_config": { "name": "全文配置生成", "description": "根据用户一句话灵感，生成完整的小说配置 JSON" },
-    "premise": { "name": "故事前提", "description": "故事架构第一步：提炼故事前提（Story Premise），浓缩全书的核心卖点与冲突链" },
-    "character_dynamics": { "name": "角色图谱", "description": "故事架构第二步：构建核心角色关系网与角色弧光" },
-    "world_building": { "name": "世界观构建", "description": "故事架构第三步：构建自带冲突引擎的世界观矩阵" },
-    "synopsis": { "name": "情节大纲", "description": "故事架构第四步：整合所有碎片，按用户选择的故事结构模式生成情节大纲" },
-    "directory_full": { "name": "章节蓝图生成（全量）", "description": "基于全书架构一次性生成所有章节的详细蓝图" },
-    "directory_incremental": { "name": "章节蓝图续写（分块）", "description": "在已有目录基础上续写后续章节蓝图，支持分块生成" },
-    "first_chapter_draft": { "name": "第一章草稿", "description": "生成小说第一章的完整正文" },
-    "next_chapter_draft": { "name": "后续章节草稿", "description": "基于上下文和章节蓝图生成后续章节" },
-    "refine_chapter": { "name": "大神级修稿", "description": "将草稿提升到大神级质量" },
-    "consistency_check": { "name": "一致性审稿", "description": "检查章节的一致性问题" },
-    "analyze_writing_style": { "name": "文风分析", "description": "从正文样本中提取作者的写作风格特征" },
-    "refine_from_review": { "name": "审稿驱动修稿", "description": "根据审稿报告中的问题精准修复草稿" },
-    "chapter_key_points": { "name": "章节要点生成", "description": "定稿后为本章生成结构化要点（剧情节点、角色动态、新增设定、伏笔与钩子）" },
-    "update_character_state": { "name": "更新角色卡动态状态", "description": "定稿后分析章节内容，以 JSON 格式返回有变化的角色的 currentState 字段，用于自动更新角色卡" },
-    "reverse_config": { "name": "逆向推演全局配置", "description": "从已有小说内容（知识库采样片段）反推出小说配置、四段架构和主角色卡，用于旧作续写场景" },
-    "extract_characters": { "name": "提取初始角色卡", "description": "从角色图谱纯文本中提取结构化角色卡数据，用于架构生成后自动创建角色卡 JSON 文件" },
-    "reverse_blueprint": { "name": "逆向推演单章蓝图", "description": "从已有小说章节正文高精度反推出该章的结构化蓝图信息，用于导入旧作场景" },
-    "vector_enhanced": { "name": "向量采样增强推演", "description": "利用向量检索采样的精确内容片段，增强全局配置推演的准确度" },
+    "generate_global_config": {
+      "name": "全文配置生成",
+      "description": "根据用户一句话灵感，生成完整的小说配置 JSON"
+    },
+    "premise": {
+      "name": "故事前提",
+      "description": "故事架构第一步：提炼故事前提（Story Premise），浓缩全书的核心卖点与冲突链"
+    },
+    "character_dynamics": {
+      "name": "角色图谱",
+      "description": "故事架构第二步：构建核心角色关系网与角色弧光"
+    },
+    "world_building": {
+      "name": "世界观构建",
+      "description": "故事架构第三步：构建自带冲突引擎的世界观矩阵"
+    },
+    "synopsis": {
+      "name": "情节大纲",
+      "description": "故事架构第四步：整合所有碎片，按用户选择的故事结构模式生成情节大纲"
+    },
+    "directory_full": {
+      "name": "章节蓝图生成（全量）",
+      "description": "基于全书架构一次性生成所有章节的详细蓝图"
+    },
+    "directory_incremental": {
+      "name": "章节蓝图续写（分块）",
+      "description": "在已有目录基础上续写后续章节蓝图，支持分块生成"
+    },
+    "first_chapter_draft": {
+      "name": "第一章草稿",
+      "description": "生成小说第一章的完整正文"
+    },
+    "next_chapter_draft": {
+      "name": "后续章节草稿",
+      "description": "基于上下文和章节蓝图生成后续章节"
+    },
+    "refine_chapter": {
+      "name": "大神级修稿",
+      "description": "将草稿提升到大神级质量"
+    },
+    "consistency_check": {
+      "name": "一致性审稿",
+      "description": "检查章节的一致性问题"
+    },
+    "analyze_writing_style": {
+      "name": "文风分析",
+      "description": "从正文样本中提取作者的写作风格特征"
+    },
+    "refine_from_review": {
+      "name": "审稿驱动修稿",
+      "description": "根据审稿报告中的问题精准修复草稿"
+    },
+    "chapter_key_points": {
+      "name": "章节要点生成",
+      "description": "定稿后为本章生成结构化要点（剧情节点、角色动态、新增设定、伏笔与钩子）"
+    },
+    "update_character_state": {
+      "name": "更新角色卡动态状态",
+      "description": "定稿后分析章节内容，以 JSON 格式返回有变化的角色的 currentState 字段，用于自动更新角色卡"
+    },
+    "reverse_config": {
+      "name": "逆向推演全局配置",
+      "description": "从已有小说内容（知识库采样片段）反推出小说配置、四段架构和主角色卡，用于旧作续写场景"
+    },
+    "extract_characters": {
+      "name": "提取初始角色卡",
+      "description": "从角色图谱纯文本中提取结构化角色卡数据，用于架构生成后自动创建角色卡 JSON 文件"
+    },
+    "reverse_blueprint": {
+      "name": "逆向推演单章蓝图",
+      "description": "从已有小说章节正文高精度反推出该章的结构化蓝图信息，用于导入旧作场景"
+    },
+    "vector_enhanced": {
+      "name": "向量采样增强推演",
+      "description": "利用向量检索采样的精确内容片段，增强全局配置推演的准确度"
+    },
     "qualitative_review": {
       "name": "定性审稿",
       "description": "按六个维度输出可追溯的观察（不做通过/失败判定）"
@@ -219,19 +293,52 @@
     "total_chapters": "已有总章数"
   },
   "stylePresets": {
-    "male-hot-blood": { "name": "男频热血", "description": "爽快升级、打脸装逼、逆袭崛起" },
-    "female-romance": { "name": "女频言情", "description": "甜宠暧昧、双向奔赴、情感细腻" },
-    "ancient-xianxia": { "name": "古风仙侠", "description": "修仙问道、古韵悠长、仙凡羁绊" },
-    "modern-urban": { "name": "现代都市", "description": "商战职场、都市生活、现实质感" },
-    "hard-scifi": { "name": "硬核科幻", "description": "星际探索、科技硬核、未来文明" },
-    "suspense-mystery": { "name": "悬疑推理", "description": "层层反转、逻辑缜密、智商在线" }
+    "male-hot-blood": {
+      "name": "男频热血",
+      "description": "爽快升级、打脸装逼、逆袭崛起"
+    },
+    "female-romance": {
+      "name": "女频言情",
+      "description": "甜宠暧昧、双向奔赴、情感细腻"
+    },
+    "ancient-xianxia": {
+      "name": "古风仙侠",
+      "description": "修仙问道、古韵悠长、仙凡羁绊"
+    },
+    "modern-urban": {
+      "name": "现代都市",
+      "description": "商战职场、都市生活、现实质感"
+    },
+    "hard-scifi": {
+      "name": "硬核科幻",
+      "description": "星际探索、科技硬核、未来文明"
+    },
+    "suspense-mystery": {
+      "name": "悬疑推理",
+      "description": "层层反转、逻辑缜密、智商在线"
+    }
   },
   "fonts": {
-    "inter": { "label": "Inter", "desc": "精心设计的现代 UI 字体，英文排版优秀，界面首选" },
-    "noto-sans-sc": { "label": "思源黑体", "desc": "黑体风格，中英文兼顾，简洁现代，科幻都市题材适用" },
-    "lxgw-wenkai": { "label": "霞鹜文楷", "desc": "楷体风格，温润典雅，最适合中文小说写作" },
-    "noto-serif-sc": { "label": "思源宋体", "desc": "宋体风格，字形端正，印刷质感强，正式文稿首选" },
-    "system": { "label": "系统默认", "desc": "macOS 使用苹方/SF Pro，原生手感，无需字体文件" }
+    "inter": {
+      "label": "Inter",
+      "desc": "精心设计的现代 UI 字体，英文排版优秀，界面首选"
+    },
+    "noto-sans-sc": {
+      "label": "思源黑体",
+      "desc": "黑体风格，中英文兼顾，简洁现代，科幻都市题材适用"
+    },
+    "lxgw-wenkai": {
+      "label": "霞鹜文楷",
+      "desc": "楷体风格，温润典雅，最适合中文小说写作"
+    },
+    "noto-serif-sc": {
+      "label": "思源宋体",
+      "desc": "宋体风格，字形端正，印刷质感强，正式文稿首选"
+    },
+    "system": {
+      "label": "系统默认",
+      "desc": "macOS 使用苹方/SF Pro，原生手感，无需字体文件"
+    }
   },
   "modelsProviders": {
     "ollama": "Ollama（本地）",

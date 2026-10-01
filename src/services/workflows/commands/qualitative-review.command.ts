@@ -41,7 +41,7 @@ export class QualitativeReviewCommand extends BaseWorkflowCommand<QualitativeRev
     if (!draft || !draft.trim()) throw new Error(t('common.noDraftContent'))
 
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
-    const defaultModel = llmStore.models.find(m => m.id === llmStore.defaultModelId)
+    const defaultModel = llmStore.modelForPurpose('qualitative_review')
     const budgets = resolveGenerationBudgets(defaultModel?.maxTokens)
 
     // ── 既有事实基线：观察必须对照 Canon，才能发现「角色记忆 / 物资」类问题 ──

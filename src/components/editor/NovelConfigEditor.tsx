@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Save, Sparkles, Info, Loader2, ScrollText } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useProjectStore } from '../../stores/project-store'
+import { useLayoutStore } from '../../stores/layout-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import type { NovelConfig } from '../../shared/ipc-channels'
@@ -45,7 +46,8 @@ export default function NovelConfigEditor() {
   const currentProject = useProjectStore(s => s.currentProject)
   const updateNovelConfig = useProjectStore(s => s.updateNovelConfig)
   const saveProject = useProjectStore(s => s.saveProject)
-  const defaultModelId = useLLMStore(s => s.defaultModelId)
+  // 按用途解析模型：只要「生成」用途有可用模型（含用途绑定）就允许触发
+  const resolveModelId = useLLMStore(s => s.resolveModelId)
   // ✅ addLog 用 getState() 命令式调用，不订阅 workflow store
   //    避免 AI 流式生成时 globalLogs 高频更新导致本组件被动重渲染
   const addLog = useWorkflowStore.getState().addLog
@@ -57,6 +59,17 @@ export default function NovelConfigEditor() {
   const [sourceTitle, setSourceTitle] = useState('')
   const [applyGuide, setApplyGuide] = useState(true)
   const [compiling, setCompiling] = useState(false)
+
+  // 拆书等来源送入的参考文本：收到后直接打开文风指南弹框并预填
+  const styleReferencePrefill = useLayoutStore(s => s.styleReferencePrefill)
+  const takeStyleReference = useLayoutStore(s => s.takeStyleReference)
+  useEffect(() => {
+    if (!styleReferencePrefill) return
+    setSourceTitle(styleReferencePrefill.source)
+    setReferenceText(styleReferencePrefill.text)
+    setShowStyleGuide(true)
+    takeStyleReference()
+  }, [styleReferencePrefill, takeStyleReference])
 
   // 各区块的独立生成状态
   const [generatingField, setGeneratingField] = useState<GeneratableField | null>(null)
@@ -92,7 +105,7 @@ export default function NovelConfigEditor() {
 
   /** AI 生成配置 — 打开弹框 */
   const handleAIGenerate = () => {
-    if (!defaultModelId) {
+    if (!resolveModelId('generate_global_config')) {
       addLog('error', `⚠️ ${t('novelConfig.messages.noAIModel')}`)
       return
     }
@@ -107,7 +120,7 @@ export default function NovelConfigEditor() {
    */
   const handleCompileStyleGuide = async () => {
     if (compiling) return
-    if (!defaultModelId) {
+    if (!resolveModelId('compile_style_guide')) {
       addLog('error', `⚠️ ${t('novelConfig.messages.noAIModel')}`)
       return
     }
@@ -134,7 +147,7 @@ export default function NovelConfigEditor() {
 
   /** 单字段 AI 生成 */
   const handleFieldGenerate = async (fieldKey: GeneratableField) => {
-    if (!defaultModelId) {
+    if (!resolveModelId('generate_field')) {
       addLog('error', `⚠️ ${t('novelConfig.messages.noAIModel')}`)
       return
     }
@@ -385,6 +398,16 @@ export default function NovelConfigEditor() {
           <div className="px-5 py-2 space-y-3">
             <div>
               <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                {t('novelConfig.styleGuide.sourceLabel')}
+              </label>
+              <Input
+                value={sourceTitle}
+                onChange={(e) => setSourceTitle(e.target.value)}
+                placeholder={t('novelConfig.styleGuide.sourcePlaceholder')}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
                 {t('novelConfig.styleGuide.referenceLabel')}
               </label>
               <Textarea
@@ -392,16 +415,6 @@ export default function NovelConfigEditor() {
                 onChange={(e) => setReferenceText(e.target.value)}
                 placeholder={t('novelConfig.styleGuide.referencePlaceholder')}
                 rows={8}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                {t('novelConfig.styleGuide.sourceLabel')}
-              </label>
-              <Input
-                value={sourceTitle}
-                onChange={(e) => setSourceTitle(e.target.value)}
-                placeholder={t('novelConfig.styleGuide.sourcePlaceholder')}
               />
             </div>
             <label className="flex items-start gap-2 cursor-pointer select-none text-xs" style={{ color: 'var(--color-text-secondary)' }}>

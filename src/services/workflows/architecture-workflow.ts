@@ -10,7 +10,9 @@ import i18n from '../../i18n'
 import { runPostProcessPipeline, type PostProcessStep, stripThinkingTags } from './workflow-utils'
 import {
   buildSegmentDirective,
+  buildContinuationDirective,
   callWithShrink,
+  generateWithContinuation,
   mergeByKey,
   resolveChunkBudget,
   resolveGenerationBudgets,
@@ -263,7 +265,7 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         // 角色图谱过长时按 token 预算切段提取，再按角色名合并，避免单次输出被截断。
         // 切段同时受「输入预算」和「输出预算」约束：本段要吐出的角色卡 JSON 规模由输入决定，
         // 只按输入预算切的话，输出必然撞上模型输出上限（finish_reason=length）。
-        const model = llmStore.models.find(m => m.id === llmStore.defaultModelId)
+        const model = llmStore.modelForPurpose('arch_characters')
         const budgets = resolveGenerationBudgets(model?.maxTokens)
         const chunkBudget = resolveChunkBudget(budgets)
         const chunks = splitTextByTokenBudget(characterDynamicsContent, chunkBudget)
@@ -280,23 +282,36 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
               .withCharacterDynamics(segment)
               .withGenre(genre)
               .build() + directive
-            let fullContent = ''
-            await new Promise<void>((resolve, reject) => {
-              llmStore.generateStream(
-                [
-                  { role: 'system', content: systemRole },
-                  { role: 'user', content: extractPrompt }
-                ],
-                {
-                  onChunk: (chunk) => { fullContent += chunk; cb.appendText(chunk) },
-                  onDone: () => resolve(),
-                  onError: (err) => reject(new Error(err))
-                },
-                undefined,
-                { responseFormat: { type: 'json_object' }, maxTokens: budgets.outputTokens }
-              )
+            // 输出被长度上限截断时保留已产出的角色卡 JSON，把结尾回传给模型接着补完，
+            // 而不是整段丢弃后重跑（原样重跑通常还会在同一处截断）。
+            const outcome = await generateWithContinuation(async (ctx) => {
+              const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+                { role: 'system', content: systemRole },
+                { role: 'user', content: extractPrompt }
+              ]
+              if (ctx.round > 0) {
+                cb.log(t('segmented.continuationLog', { round: ctx.round }))
+                messages.push({ role: 'assistant', content: ctx.tail })
+                messages.push({ role: 'user', content: buildContinuationDirective(ctx.round) })
+              }
+              let fullContent = ''
+              let truncated = false
+              await new Promise<void>((resolve, reject) => {
+                llmStore.generateStream(
+                  messages,
+                  {
+                    onChunk: (chunk) => { fullContent += chunk; cb.appendText(chunk) },
+                    onDone: () => resolve(),
+                    onTruncated: (partial) => { fullContent = partial; truncated = true; resolve() },
+                    onError: (err) => reject(new Error(err))
+                  },
+                  undefined,
+                  { responseFormat: { type: 'json_object' }, maxTokens: budgets.outputTokens }
+                )
+              })
+              return { text: fullContent, truncated }
             })
-            return parseCharacterCards(fullContent)
+            return parseCharacterCards(outcome.text)
           }
           try {
             // 本段输出被截断时，自动把这一段对半再切后重试，尽量把角色卡拿全

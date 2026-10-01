@@ -19,10 +19,21 @@ export interface ConfigChannels {
   }
 }
 
+/** 可以单独绑定模型的用途类别（多模型管理） */
+export type LLMPurposeCategory = 'generation' | 'refinement' | 'summary' | 'embedding'
+
+/** 用途类别 → 模型 id 的绑定表 */
+export type PurposeModelBindings = Partial<Record<LLMPurposeCategory, string | null>>
+
 export interface GlobalConfig {
   theme: string
   defaultModelId: string | null
   defaultEmbeddingModelId?: string | null
+  /**
+   * 用途 → 模型 id 的绑定表（多模型管理）。
+   * 未绑定的用途回落到 defaultModelId / defaultEmbeddingModelId。
+   */
+  purposeModels?: PurposeModelBindings
   editorFontSize: number
   editorFontFamily: string
   autoSaveInterval: number
@@ -137,6 +148,14 @@ export interface LLMChannels {
     args: []
     return: string | null
   }
+  'llm:get-purpose-models': {
+    args: []
+    return: PurposeModelBindings
+  }
+  'llm:set-purpose-model': {
+    args: [purpose: LLMPurposeCategory, modelId: string | null]
+    return: { success: boolean; error?: string }
+  }
   'llm:test-connection': {
     args: [model: ModelProfile]
     return: { success: boolean; error?: string }
@@ -145,7 +164,8 @@ export interface LLMChannels {
 
 export interface LLMStreamEvents {
   'llm:stream-chunk': { requestId: string; chunk: string }
-  'llm:stream-done': { requestId: string; fullText: string; usage?: TokenUsage }
+  'llm:stream-done': { requestId: string; fullText: string; usage?: TokenUsage; meta?: LLMCompletionMeta }
+  'llm:stream-truncated': { requestId: string; partialText: string; usage?: TokenUsage; meta?: LLMCompletionMeta }
   'llm:stream-error': { requestId: string; error: string }
 }
 
@@ -192,6 +212,8 @@ export interface LLMRequest {
   stream?: boolean
   responseFormat?: { type: 'json_object' | 'text' }
   thinking?: boolean
+  /** 调用用途：写入统计表，用于区分「token 花在哪个环节」 */
+  purpose?: string
 }
 
 export interface LLMResponse {
@@ -207,6 +229,14 @@ export interface TokenUsage {
   totalTokens: number
 }
 
+/** 调用结束时的补充信息：用于判断输出是否被长度上限截断 */
+export interface LLMCompletionMeta {
+  /** 供应商因输出上限截断（finish_reason=length / MAX_TOKENS），内容不完整 */
+  truncated?: boolean
+  /** 供应商返回的原始结束原因 */
+  finishReason?: string
+}
+
 export interface ModelProfile {
   id: string
   name: string
@@ -217,7 +247,10 @@ export interface ModelProfile {
   baseUrl: string
   temperature: number
   maxTokens: number
-  purposes: Array<'generation' | 'refinement' | 'summary' | 'embedding'>
+  /** 该模型能胜任的用途（决定它出现在哪些用途下拉框里） */
+  purposes: LLMPurposeCategory[]
+  /** 是否启用；停用后不参与用途路由（缺省视为启用，兼容旧配置） */
+  enabled?: boolean
 }
 
 // ===== 引入 DB 类型 =====
@@ -460,6 +493,30 @@ export interface CanonChapterSummary {
 
 
 // ===== 知识库频道 =====
+/** 拆书：单章记录 */
+export interface BookChapterEntry {
+  number: number
+  title: string
+  wordCount: number
+  /** 该章在知识库中的文档 id */
+  docId: string
+  /** 该章在知识库中的文档名（检索结果里显示的名字） */
+  fileName: string
+}
+
+/** 拆书档案 */
+export interface BookRecord {
+  id: string
+  name: string
+  sourcePath: string
+  importedAt: string
+  chapterCount: number
+  wordCount: number
+  /** 是否已生成向量（无 Embedding 模型时为 false，仅全文检索） */
+  vectorized: boolean
+  chapters: BookChapterEntry[]
+}
+
 export interface KnowledgeBaseChannels {
   'kb:import-document': { args: [filePath: string]; return: { success: boolean; docId?: string; chunkCount?: number; error?: string } }
   'kb:import-folder': { args: [folderPath: string]; return: { success: boolean; importedCount: number; failedFiles: string[]; error?: string } }
@@ -473,6 +530,10 @@ export interface KnowledgeBaseChannels {
   'dialog:select-import-folder': { args: []; return: string | null }
   'kb:get-vectorless-count': { args: []; return: { count: number } }
   'kb:backfill-vectors': { args: []; return: { success: boolean; processed: number; failed: number; error?: string } }
+  'kb:deconstruct-book': { args: [filePath: string]; return: { success: boolean; book?: BookRecord; error?: string } }
+  'kb:list-books': { args: []; return: BookRecord[] }
+  'kb:get-document-text': { args: [docId: string]; return: { success: boolean; text?: string; fileName?: string; chunkCount?: number; error?: string } }
+  'kb:remove-book': { args: [bookId: string]; return: { success: boolean; removedChapters: number; error?: string } }
 }
 
 // ===== 导入小说 =====
@@ -502,8 +563,109 @@ export interface MCPChannels {
   'mcp:get-config-path': { args: []; return: string }
 }
 
+// ===== Skill 管理频道 =====
+export interface SkillChannels {
+  'skill:get-paths': { args: []; return: { velaHome: string; userDir: string; projectDir: string | null } }
+  'skill:list-files': { args: []; return: Array<{ name: string; scope: 'user' | 'project'; filePath: string; size: number }> }
+  'skill:read-file': { args: [name: string, scope: 'user' | 'project']; return: { success: boolean; content: string; filePath: string; error?: string } }
+  'skill:write-file': { args: [name: string, content: string, scope: 'user' | 'project']; return: { success: boolean; filePath?: string; error?: string } }
+  'skill:delete-file': { args: [name: string, scope: 'user' | 'project']; return: { success: boolean; error?: string } }
+  'skill:copy-file': { args: [name: string, from: 'user' | 'project', to: 'user' | 'project']; return: { success: boolean; filePath?: string; error?: string } }
+  'skill:get-disabled': { args: []; return: { disabled: string[] } }
+  'skill:set-disabled': { args: [names: string[]]; return: { success: boolean } }
+  'skill:import-file': { args: []; return: { name: string; content: string } | null }
+  'skill:open-dir': { args: [scope: 'user' | 'project']; return: { success: boolean; error?: string } }
+  'skill:list-pipelines': { args: []; return: Array<{ name: string; scope: 'user' | 'project'; filePath: string; title: string; stepCount: number }> }
+  'skill:read-pipeline': { args: [name: string, scope: 'user' | 'project']; return: { success: boolean; content: string; filePath: string; error?: string } }
+  'skill:write-pipeline': { args: [name: string, content: string, scope: 'user' | 'project']; return: { success: boolean; filePath?: string; error?: string } }
+  'skill:delete-pipeline': { args: [name: string, scope: 'user' | 'project']; return: { success: boolean; error?: string } }
+  'skill:inspect-package': {
+    args: [options: { kind: 'zip' | 'github'; filePath?: string; url?: string }]
+    return: {
+      success: boolean
+      /** 用户取消了文件选择 */
+      cancelled?: boolean
+      /** 安装会话令牌；连同候选一起返回 */
+      token?: string
+      source?: SkillPackageSource
+      candidates?: SkillPackageCandidate[]
+      error?: string
+    }
+  }
+  'skill:install-package': {
+    args: [options: { token: string; dir: string; scope: 'user' | 'project'; name?: string; overwrite?: boolean }]
+    return: {
+      success: boolean
+      name?: string
+      dir?: string
+      fileCount?: number
+      version?: string
+      /** exists 表示同名 Skill 已存在，界面确认后再带 overwrite 重试 */
+      code?: 'exists'
+      error?: string
+    }
+  }
+}
+
+/** Skill 包来源（标签 + 可追溯地址） */
+export interface SkillPackageSource {
+  kind: 'zip' | 'github'
+  label: string
+  url?: string
+  ref?: string
+  subdir?: string
+  filePath?: string
+}
+
+/** 包内一个可安装的 Skill */
+export interface SkillPackageCandidate {
+  dir: string
+  indexPath: string
+  name: string
+  displayName?: string
+  description?: string
+  version?: string
+  fileCount: number
+  body: string
+}
+
+/** Skill 的来源标记（存在 Skill 目录下的 .vela-source.json） */
+export interface SkillOrigin {
+  kind?: string
+  label?: string
+  url?: string | null
+  ref?: string | null
+  subdir?: string | null
+  version?: string | null
+  importedAt?: string
+}
+
+// ===== 导出 / 备份频道（EPUB 与 zip 需要主进程压缩与二进制写盘） =====
+export interface ExportChannels {
+  'novel:export-epub': {
+    args: [options: {
+      outputDir: string
+      fileName: string
+      title: string
+      author?: string
+      language?: string
+      description?: string
+      chapters: Array<{ title: string; content: string }>
+    }]
+    return: { success: boolean; path?: string; size?: number; error?: string }
+  }
+  'novel:write-zip': {
+    args: [options: {
+      outputDir: string
+      fileName: string
+      entries: Array<{ path: string; content: string }>
+    }]
+    return: { success: boolean; path?: string; size?: number; error?: string }
+  }
+}
+
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ImportChannels & MCPChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ImportChannels & MCPChannels & SkillChannels & ExportChannels
 export type AllEventChannels = LLMStreamEvents
 
 /** 提取 invoke 频道名 */

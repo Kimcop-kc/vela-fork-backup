@@ -3,11 +3,12 @@
  */
 
 import { useState, useEffect } from 'react'
-import { ChevronRight, ChevronDown, FileText, FolderOpen, Copy, PenTool } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, FolderOpen, Copy, PenTool, Download } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { FileNode } from '../../../shared/ipc-channels'
 import { ipc } from '../../../services/ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
+import { useLayoutStore } from '../../../stores/layout-store'
 import i18n from '../../../i18n'
 
 import { showSidebarMenu, openChapterFile } from './SidebarShared'
@@ -113,12 +114,26 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
   // 只显示正文章节（过滤掉旧的 _notes 文件）
   const chapterFiles = files.filter(f => !f.name.includes('_notes'))
 
+  /** 打开导出对话框（EPUB / Markdown / TXT + 项目备份包） */
+  const openExport = (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    useLayoutStore.getState().openExport()
+  }
+
   return (
     <div>
       <div
         className="tree-item gap-1.5 cursor-pointer select-none"
         style={{ paddingLeft: 10 }}
         onClick={() => setOpen(v => !v)}
+        onContextMenu={e => showSidebarMenu([
+          {
+            key: 'export',
+            label: t('manuscript.exportBook'),
+            icon: <Download size={13} />,
+            onClick: () => openExport(),
+          },
+        ], e)}
       >
         {open
           ? <ChevronDown size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
@@ -126,11 +141,22 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
         }
         <PenTool size={14} style={{ color: 'var(--color-text-muted)' }} />
         <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('manuscript.chapters')}</span>
-        {chapterFiles.length > 0 && (
-          <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-            {chapterFiles.length} {t('chapters', { ns: 'common' })}
-          </span>
-        )}
+        <span className="ml-auto flex items-center gap-1.5">
+          {chapterFiles.length > 0 && (
+            <span className="text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+              {chapterFiles.length} {t('chapters', { ns: 'common' })}
+            </span>
+          )}
+          <button
+            type="button"
+            className="icon-btn"
+            style={{ width: 18, height: 18 }}
+            title={t('manuscript.exportBookDesc')}
+            onClick={openExport}
+          >
+            <Download size={12} />
+          </button>
+        </span>
       </div>
       {open && (
         <div>
@@ -155,6 +181,13 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
                       onClick: () => openChapterFile(f.path, displayName),
                     },
                     { key: 'div1', type: 'divider' as const },
+                    {
+                      key: 'export',
+                      label: t('manuscript.exportBook'),
+                      icon: <Download size={13} />,
+                      onClick: () => openExport(),
+                    },
+                    { key: 'div2', type: 'divider' as const },
                     {
                       key: 'copy-path',
                       label: t('manuscript.copyPath'),

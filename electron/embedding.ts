@@ -169,3 +169,43 @@ export function chunkText(
 
   return chunks.length > 0 ? chunks : [text.trim()]
 }
+
+// ===== 文本块还原 =====
+
+/**
+ * 去掉相邻文本块之间的重叠。
+ *
+ * chunkText 分块时会保留 overlap 个字符，直接拼接会出现重复片段；
+ * 这里优先按已知 overlap 精确匹配，匹配不上再退化为最大重叠匹配
+ * （容忍分块 trim 掉的首尾空白），把重复部分去掉。
+ */
+export function stripChunkOverlap(previous: string, next: string, overlap: number = 50): string {
+  const limit = Math.min(previous.length, next.length, overlap)
+  // 调用方显式给出了 overlap，精确命中就按它裁剪
+  if (limit > 0 && previous.slice(-limit) === next.slice(0, limit)) {
+    return next.slice(limit)
+  }
+  // 分块时会 trim 掉边界空白，直接从 next 开头比较可能匹配不上，去掉空白再试一次；
+  // 这条是兜底推测，要求重叠至少 8 个字符，避免把巧合的短重叠当成重复内容删掉
+  const head = next.replace(/^\s+/, '')
+  for (let size = limit; size >= 8; size--) {
+    const tail = previous.slice(-size).replace(/^\s+/, '')
+    if (tail.length >= 8 && head.startsWith(tail)) return head.slice(tail.length)
+  }
+  return next
+}
+
+/**
+ * 把 chunkText 切出来的文本块拼回完整原文。
+ *
+ * 除首块外，每块开头都带着上一块的尾部重叠，去掉重叠后直接相接即可；
+ * 不能额外插入分隔符，否则段落边界会多出空行、长段落中间会被硬拆。
+ */
+export function joinChunkTexts(chunks: string[], overlap: number = 50): string {
+  if (chunks.length === 0) return ''
+  let text = chunks[0]
+  for (let i = 1; i < chunks.length; i++) {
+    text += stripChunkOverlap(chunks[i - 1], chunks[i], overlap)
+  }
+  return text
+}

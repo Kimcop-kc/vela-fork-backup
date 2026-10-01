@@ -47,6 +47,7 @@ export type WorkflowType =
   | 'post_process'            // 后处理任务（角色卡提取等）
   | 'novel_import'            // 导入已有小说（逆向推演全流程）
   | 'style_study'             // 文风研究（参考文本 → 可执行文风指南）
+  | 'skill_pipeline'          // Skill 流水线（多个 Skill 串联，每步可人工确认）
 
 /** 工作流步骤执行器 */
 export type StepExecutor = (

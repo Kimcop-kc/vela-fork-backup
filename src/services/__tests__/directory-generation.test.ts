@@ -29,13 +29,13 @@ describe('directory generation never reports empty output as success', () => {
     expect(parseTextBlueprints(JSON.stringify([item(1)]) + '\nFinal: []', 1, 3)).toEqual([])
   })
   it('rejects empty output before saving or skipping ahead', async () => {
-    vi.spyOn(BaseWorkflowCommand.prototype as unknown as { callLLM: (...args: unknown[]) => Promise<string> }, 'callLLM').mockResolvedValue('{"blueprints":[]}')
+    vi.spyOn(BaseWorkflowCommand.prototype as unknown as { callLLMWithContinuation: (...args: unknown[]) => Promise<string> }, 'callLLMWithContinuation').mockResolvedValue('{"blueprints":[]}')
     const invoke = vi.spyOn(ipc, 'invoke').mockResolvedValue({ success: true } as never)
     await expect(new GenerateDirectoryCommand({ mode: 'full', count: 3 }).execute({ step: {}, context: context(), callbacks })).rejects.toThrow()
     expect(invoke.mock.calls.filter(([channel]) => channel === 'db:blueprint-upsert-many')).toHaveLength(0)
   })
   it('limits the first prompt to its batch and saves with project ownership', async () => {
-    const llm = vi.spyOn(BaseWorkflowCommand.prototype as unknown as { callLLM: (...args: unknown[]) => Promise<string> }, 'callLLM')
+    const llm = vi.spyOn(BaseWorkflowCommand.prototype as unknown as { callLLMWithContinuation: (...args: unknown[]) => Promise<string> }, 'callLLMWithContinuation')
     llm.mockResolvedValueOnce(JSON.stringify({ blueprints: [1, 2, 3, 4].map(item) })).mockResolvedValueOnce(JSON.stringify({ blueprints: [item(5)] }))
     const invoke = vi.spyOn(ipc, 'invoke').mockResolvedValue({ success: true } as never)
     const result = await new GenerateDirectoryCommand({ mode: 'full', count: 5 }).execute({ step: {}, context: context(), callbacks })
@@ -44,12 +44,12 @@ describe('directory generation never reports empty output as success', () => {
     expect(invoke.mock.calls.filter(([channel]) => channel === 'db:blueprint-upsert-many').every(call => call[2] === 'D:/test/A')).toBe(true)
   })
   it('does not skip a missing chapter and call a partial batch complete', async () => {
-    vi.spyOn(BaseWorkflowCommand.prototype as unknown as { callLLM: (...args: unknown[]) => Promise<string> }, 'callLLM').mockResolvedValue(JSON.stringify([item(1), item(3)]))
+    vi.spyOn(BaseWorkflowCommand.prototype as unknown as { callLLMWithContinuation: (...args: unknown[]) => Promise<string> }, 'callLLMWithContinuation').mockResolvedValue(JSON.stringify([item(1), item(3)]))
     vi.spyOn(ipc, 'invoke').mockResolvedValue({ success: true } as never)
     await expect(new GenerateDirectoryCommand({ mode: 'full', count: 3 }).execute({ step: {}, context: context(), callbacks })).rejects.toThrow()
   })
   it('does not save late model results into another project', async () => {
-    vi.spyOn(BaseWorkflowCommand.prototype as unknown as { callLLM: (...args: unknown[]) => Promise<string> }, 'callLLM').mockImplementation(async () => {
+    vi.spyOn(BaseWorkflowCommand.prototype as unknown as { callLLMWithContinuation: (...args: unknown[]) => Promise<string> }, 'callLLMWithContinuation').mockImplementation(async () => {
       useProjectStore.setState({ currentProject: { id: 'B', path: 'D:/test/B' } as never })
       return JSON.stringify({ blueprints: [item(1)] })
     })

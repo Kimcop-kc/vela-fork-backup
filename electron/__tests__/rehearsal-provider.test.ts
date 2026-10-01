@@ -23,6 +23,23 @@ describe('explicit thinking control for rehearsal requests', () => {
     expect(error).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('长度上限'))
   })
 
+  it('hands the partial streamed text to onTruncated when the caller can continue it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      'data: {"choices":[{"delta":{"content":"{\\"directions\\":[]}"}}]}\n\n' +
+      'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n',
+    )))
+    const done = vi.fn(), error = vi.fn(), truncated = vi.fn()
+    await new OpenAIProvider().generateStream(model, [], {
+      temperature: 0.7, maxTokens: 100, thinking: false, signal: new AbortController().signal,
+      onChunk: vi.fn(), onDone: done, onError: error, onTruncated: truncated,
+    })
+    expect(done).not.toHaveBeenCalled()
+    expect(error).not.toHaveBeenCalled()
+    expect(truncated).toHaveBeenCalledTimes(1)
+    expect(truncated.mock.calls[0][0]).toContain('directions')
+    expect(truncated.mock.calls[0][2]).toMatchObject({ truncated: true, finishReason: 'length' })
+  })
+
   it('strips an orphan thinking prefix split across streamed chunks', async () => {
     const events = ['Internal deliberation</thi', 'nk>```json\n{"directions":[]}\n```']
       .map(content => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`).join('')
@@ -41,11 +58,12 @@ describe('explicit thinking control for rehearsal requests', () => {
     await new OpenAIProvider().generate({ ...model, modelName: 'glm-5.3-flash:cloud' }, [], { temperature: 0.7, maxTokens: 100, responseFormat: { type: 'json_object' } })
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).not.toHaveProperty('response_format')
   })
-  it('does not expose or accept a response cut off by the output limit', async () => {
+  it('keeps the partial content of a response cut off by the output limit so callers can continue it', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ finish_reason: 'length', message: { content: '{"message":"半截' } }] }))))
     const result = await new OpenAIProvider().generate(model, [], { thinking: false, temperature: 0.7, maxTokens: 100 })
     expect(result.success).toBe(false)
-    expect(result.content).toBe('')
+    expect(result.truncated).toBe(true)
+    expect(result.content).toBe('{"message":"半截')
     expect(result.error).toContain('结果不完整')
   })
   it('removes an orphan closing thinking delimiter returned by a cloud adapter', async () => {

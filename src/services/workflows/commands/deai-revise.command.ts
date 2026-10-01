@@ -121,7 +121,7 @@ export class DeaiReviseCommand extends BaseWorkflowCommand<string> {
     if (!template) throw new Error(t('deai.templateMissing'))
 
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
-    const defaultModel = llmStore.models.find(m => m.id === llmStore.defaultModelId)
+    const defaultModel = llmStore.modelForPurpose('deai_revise')
     const outputTokens = Math.max(2048, Math.floor((defaultModel?.maxTokens || 4096)))
     const inputBudget = Math.max(2000, Math.floor(outputTokens * 2.5) - 2500)
 

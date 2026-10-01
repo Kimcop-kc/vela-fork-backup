@@ -81,11 +81,27 @@ export class OpenAIProvider implements ILLMProvider {
       usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
     }
 
-    if (data.choices?.[0]?.finish_reason === 'length') return { success: false, content: '', error: '模型输出达到长度上限，结果不完整，未提交本轮操作。请分段改写或增加模型输出上限。' }
+    const finishReason = data.choices?.[0]?.finish_reason
     let finalContent = data.choices?.[0]?.message?.content ?? ''
     // Some Ollama/cloud adapters omit the opening thinking delimiter.
     finalContent = finalContent.replace(/^[\s\S]*<\/think>/i, '')
     finalContent = finalContent.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
+
+    // 输出被长度上限截断：success 仍为 false（旧调用方行为不变），但把已产出的部分内容
+    // 一并返回，调用方可以据此续写补全，而不是整段丢弃重来。
+    if (finishReason === 'length') {
+      return {
+        success: false,
+        content: finalContent,
+        truncated: true,
+        error: '模型输出达到长度上限，结果不完整，未提交本轮操作。请分段改写或增加模型输出上限。',
+        usage: data.usage ? {
+          promptTokens: data.usage.prompt_tokens,
+          completionTokens: data.usage.completion_tokens,
+          totalTokens: data.usage.total_tokens,
+        } : undefined,
+      }
+    }
 
     return {
       success: true,
@@ -149,6 +165,7 @@ export class OpenAIProvider implements ILLMProvider {
       let fullText = ''
       let isThinking = false
       let truncated = false
+      let finishReason = ''
       let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined
 
       const handleData = (json: string) => {
@@ -166,7 +183,10 @@ export class OpenAIProvider implements ILLMProvider {
               totalTokens: parsed.usage.total_tokens ?? 0,
             }
           }
-          if (parsed.choices?.[0]?.finish_reason === 'length') truncated = true
+          if (parsed.choices?.[0]?.finish_reason) {
+            finishReason = parsed.choices[0].finish_reason
+            if (finishReason === 'length') truncated = true
+          }
           const delta = parsed.choices?.[0]?.delta
 
           let emitChunk = ''
@@ -232,11 +252,19 @@ export class OpenAIProvider implements ILLMProvider {
         opts.onChunk(closeTag)
       }
 
+      const cleanedText = fullText.replace(/^[\s\S]*<\/think>/i, '').replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
+      // 截断时也把已产出的正文交回给调用方：提供 onTruncated 的可以续写补齐，
+      // 未提供的保持既有报错行为不变。
       if (truncated) {
+        const meta = { truncated: true, finishReason: finishReason || 'length' }
+        if (opts.onTruncated) {
+          if (usage && usage.totalTokens > 0) opts.onTruncated(cleanedText, usage, meta)
+          else opts.onTruncated(cleanedText, undefined, meta)
+          return
+        }
         opts.onError('模型输出达到长度上限，结果不完整，未提交本轮操作。请分段改写或增加模型输出上限。')
         return
       }
-      const cleanedText = fullText.replace(/^[\s\S]*<\/think>/i, '').replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
       // 只有拿到真实 usage 时才多传一个参数：没有数据时保持原有调用签名
       if (usage && usage.totalTokens > 0) {
         opts.onDone(cleanedText, usage)

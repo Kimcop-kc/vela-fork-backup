@@ -12,6 +12,7 @@ import { useThemeStore, FONT_OPTIONS, type FontId } from '../../stores/theme-sto
 import type { ModelProfile } from '../../shared/ipc-channels'
 import type { ProviderPreset } from '../../shared/provider-presets'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
+import { PURPOSE_CATEGORY_LABEL_KEY } from '../../shared/purpose-routing'
 import { randomUUID } from '../../utils/id'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -21,6 +22,7 @@ import { cn } from '../../lib/utils'
 import { ipc } from '../../services/ipc-client'
 import { Switch } from '../ui/Switch'
 import OllamaModelPicker from './OllamaModelPicker'
+import PurposeBindingPanel from './PurposeBindingPanel'
 
 // 打赏/赞助 图片资源（通过 import 让 Vite 处理路径，确保打包后可正常加载）
 import wepayImg from '/buyme/wepay.jpg?url'
@@ -307,6 +309,13 @@ function LLMSection({
       {/* 模型列表 */}
       {!editingModel && (
         <>
+          {/* 用途绑定：先在下方模型池导入模型，再在这里为每个用途挑选模型 */}
+          <PurposeBindingPanel purposes={purposes} />
+
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+            {t('models.poolTitle')}
+          </h3>
+
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
               {t('models.configuredCount', { count: filtered.length, label: purposeLabel })}
@@ -343,6 +352,7 @@ function LLMSection({
                   onSetDefault={() => isEmbeddingSection
                     ? setDefaultEmbeddingModel(model.id)
                     : setDefaultModel(model.id)}
+                  onToggleEnabled={() => { void saveModel({ ...model, enabled: model.enabled === false }) }}
                   onEdit={() => setEditingModel({ ...model })}
                   onDelete={() => deleteModel(model.id)}
                 />
@@ -357,15 +367,18 @@ function LLMSection({
 
 /** 模型卡片 */
 function ModelCard({
-  model, isDefault, onSetDefault, onEdit, onDelete,
+  model, isDefault, onSetDefault, onToggleEnabled, onEdit, onDelete,
 }: {
   model: ModelProfile
   isDefault: boolean
   onSetDefault: () => void
+  /** 启用/停用（停用后不参与用途路由） */
+  onToggleEnabled: () => void
   onEdit: () => void
   onDelete: () => void
 }) {
   const { t } = useTranslation('settings')
+  const isEnabled = model.enabled !== false
   return (
     <div
       className={cn(
@@ -373,6 +386,7 @@ function ModelCard({
         isDefault
           ? 'border border-[var(--color-accent)]'
           : 'border border-[var(--color-border)] hover:border-[var(--color-accent)]',
+        !isEnabled && 'opacity-60',
       )}
       style={{ backgroundColor: isDefault ? 'color-mix(in srgb, var(--color-accent) 5%, var(--color-panel))' : 'var(--color-panel)' }}
     >
@@ -395,11 +409,26 @@ function ModelCard({
               {t('models.default')}
             </span>
           )}
+          {!isEnabled && (
+            <span
+              className="text-[0.7rem] px-1.5 py-0.5 rounded-full flex-shrink-0"
+              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}
+            >
+              {t('models.disabled')}
+            </span>
+          )}
         </div>
         <p className="text-xs truncate mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
           {model.provider} · {model.modelName} · {model.baseUrl}
         </p>
       </div>
+
+      {/* 启用开关：停用后不再参与用途路由，但配置保留 */}
+      <Switch
+        checked={isEnabled}
+        onCheckedChange={onToggleEnabled}
+        aria-label={isEnabled ? t('models.disableModel') : t('models.enableModel')}
+      />
 
       {/* 操作按钮（hover 显示） */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -436,7 +465,7 @@ function ModelCard({
 
 /** 模型编辑表单 */
 function ModelForm({
-  model, onChange, onSave, onCancel, saving, presets,
+  model, onChange, onSave, onCancel, saving, presets, purposeOptions,
 }: {
   model: ModelProfile
   onChange: (m: ModelProfile) => void
@@ -688,6 +717,38 @@ function ModelForm({
           </div>
         </div>
       )}
+
+      {/* 能力标签：决定该模型会出现在哪些用途的下拉框里 */}
+      <div>
+        <Label className="mb-0">{t('models.capabilities')}</Label>
+        <div className="flex flex-wrap gap-3 mt-2">
+          {purposeOptions.map((purpose) => {
+            const checked = model.purposes?.includes(purpose) ?? false
+            return (
+              <label
+                key={purpose}
+                className="flex items-center gap-1.5 text-xs cursor-pointer"
+                style={{ color: 'var(--color-text)' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => {
+                    const current = model.purposes ?? []
+                    const next = checked ? current.filter((x) => x !== purpose) : [...current, purpose]
+                    // 至少保留一个用途，否则模型会从所有用途下拉框里消失
+                    up('purposes', next.length > 0 ? next : current)
+                  }}
+                />
+                {t(PURPOSE_CATEGORY_LABEL_KEY[purpose])}
+              </label>
+            )
+          })}
+        </div>
+        <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+          {t('models.capabilitiesHint')}
+        </p>
+      </div>
 
       <div className="flex items-center gap-2 pt-1">
         <Button

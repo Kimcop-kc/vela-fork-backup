@@ -246,6 +246,33 @@ export async function removeDocument(
 }
 
 /**
+ * 按文档 id 读取全部文本块（按 chunkIndex 升序）
+ *
+ * 拆书场景下每一章就是一条文档，拿 docId 即可取回该章完整正文；
+ * 普通导入的文档同样适用（此时没有 chapterNumber）。
+ */
+export async function getChunksByDoc(
+  projectPath: string,
+  docId: string,
+): Promise<ChunkRecord[]> {
+  try {
+    const db = await getConnection(projectPath)
+    const tableNames = await db.tableNames()
+    if (!tableNames.includes(TABLE_NAME)) return []
+
+    const table = await db.openTable(TABLE_NAME)
+    const escaped = String(docId).replace(/'/g, "''")
+    const rows = await table.query().filter(`docId = '${escaped}'`).toArray()
+    return (rows as unknown as ChunkRecord[]).sort(
+      (a, b) => (a.chunkIndex ?? 0) - (b.chunkIndex ?? 0),
+    )
+  } catch (error) {
+    console.error('[Vela VectorStore] 按文档读取文本块失败:', error)
+    return []
+  }
+}
+
+/**
  * 统一检索入口 — 自动选择 FTS / 混合模式
  *
  * @param queryText 搜索关键词/语句

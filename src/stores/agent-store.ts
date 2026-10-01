@@ -113,7 +113,7 @@ const generateTitle = (content: string): string => {
 /** 生成 /help 命令的帮助文本 */
 const generateHelpText = (): string => {
   const toolCount = toolRegistry.listAll().length
-  const skillCount = skillRegistry.listAll().length
+  const skillCount = skillRegistry.listEnabled().length
   const t = (key: string) => i18n.t(key, { ns: 'panels' })
   const lines: string[] = [
     t('agent.helpTitle'),
@@ -132,7 +132,7 @@ const generateHelpText = (): string => {
     '',
     t('agent.skillCommands'),
   ]
-  for (const s of skillRegistry.listAll()) {
+  for (const s of skillRegistry.listEnabled()) {
     lines.push('- `/' + s.metadata.name + '` — ' + s.metadata.description)
   }
   lines.push('', t('agent.helpFooter'))
@@ -188,7 +188,8 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
       createdAt: Date.now(),
       updatedAt: Date.now(),
       mode: get().defaultMode,
-      modelId: llmStore.defaultModelId,
+      // 新会话默认使用「正文生成」用途实际生效的模型，界面与调用保持一致
+      modelId: llmStore.resolveModelId('agent_loop') ?? llmStore.defaultModelId,
     }
     set(state => ({
       conversations: [newConv, ...state.conversations],
@@ -377,7 +378,7 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
     try {
       const llmStore = useLLMStore.getState()
       const currentConv = get().conversations.find(c => c.id === convId)!
-      const modelId = currentConv.modelId ?? llmStore.defaultModelId ?? undefined
+      const modelId = currentConv.modelId ?? llmStore.resolveModelId('agent_loop') ?? undefined
 
       if (!modelId) {
         updateAssistantMsg(m => ({
@@ -429,6 +430,7 @@ export const useAgentStore = create<AgentState>()(persist((set, get) => ({
           temperature: 0.7,    // 创作场景适度随机
           thinking: false,
           responseFormat: { type: 'json_object' as const },
+          purpose: 'agent_loop',
         }
         const response = await (window as unknown as { velaAPI: { invoke: (ch: string, ...args: unknown[]) => Promise<unknown> } }).velaAPI.invoke('llm:generate', request)
         const res = response as { success: boolean; content: string; error?: string }

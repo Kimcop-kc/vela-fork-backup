@@ -3,6 +3,7 @@ import { useLLMStore } from '../../../stores/llm-store'
 import { globalEventBus, EventPayloadMap } from '../../../shared/event-bus'
 import type { BasePromptBuilder } from '../../prompts/prompt-builder'
 import i18n from '../../../i18n'
+import { buildContinuationDirective, generateWithContinuation } from '../segmented-generation'
 
 export interface CommandExecuteParams {
   step: unknown
@@ -28,7 +29,8 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     context?: WorkflowContext
   ): Promise<string> {
     const llmStore = useLLMStore.getState()
-    if (!llmStore.defaultModelId) throw new Error(i18n.t('base.noDefaultModel', { ns: 'commands' }))
+    // 按用途解析模型（用途绑定 → 默认模型 → 模型池），只有完全没有可用模型才报错
+    if (!llmStore.resolveModelId(options?.purpose)) throw new Error(i18n.t('base.noDefaultModel', { ns: 'commands' }))
 
     callbacks.setProgress(10)
 
@@ -117,6 +119,131 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   }
 
   /**
+   * 单轮流式生成：返回本轮文本，以及是否撞上模型输出长度上限。
+   *
+   * 截断时不再丢弃已产出的内容（主进程通过 onTruncated 送回来），
+   * 上层可以据此续写拼接，而不是整段重试。
+   */
+  private generateStreamOnce(
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+    callbacks: StepCallbacks,
+    options: { responseFormat?: { type: string }; thinking?: boolean; maxTokens?: number; purpose?: string } | undefined,
+    context: WorkflowContext | undefined,
+  ): Promise<{ text: string; truncated: boolean }> {
+    const llmStore = useLLMStore.getState()
+    if (!llmStore.resolveModelId(options?.purpose)) {
+      return Promise.reject(new Error(i18n.t('base.noDefaultModel', { ns: 'commands' })))
+    }
+
+    return new Promise((resolve, reject) => {
+      let fullContent = ''
+      let streamRequestId = ''
+
+      let cancelCheckTimer: ReturnType<typeof setInterval> | null = null
+      if (context) {
+        cancelCheckTimer = setInterval(() => {
+          if (context.cancelled && streamRequestId) {
+            clearInterval(cancelCheckTimer!)
+            cancelCheckTimer = null
+            llmStore.cancelGeneration(streamRequestId).catch(() => {})
+            reject(new Error(i18n.t('base.workflowCancelled', { ns: 'commands' })))
+          }
+        }, 200)
+      }
+
+      const cleanup = () => {
+        if (cancelCheckTimer) {
+          clearInterval(cancelCheckTimer)
+          cancelCheckTimer = null
+        }
+      }
+
+      const finish = (text: string, truncated: boolean) => {
+        cleanup()
+        // 取消后不 resolve，让 reject 生效
+        if (context?.cancelled) {
+          reject(new Error(i18n.t('base.workflowCancelled', { ns: 'commands' })))
+          return
+        }
+        callbacks.setProgress(90)
+        resolve({ text: this.stripThinkingTags(text || fullContent), truncated })
+      }
+
+      llmStore.generateStream(
+        messages,
+        {
+          onChunk: (chunk) => {
+            if (context?.cancelled) return
+            fullContent += chunk
+            callbacks.appendText(chunk)
+          },
+          onDone: (text) => finish(text, false),
+          onTruncated: (partial) => finish(partial, true),
+          onError: (err) => {
+            cleanup()
+            reject(new Error(err || i18n.t('base.streamFailed', { ns: 'commands' })))
+          },
+        },
+        undefined,
+        { ...options, purpose: options?.purpose ?? this.constructor.name },
+      ).then(reqId => {
+        streamRequestId = reqId
+        if (context?.cancelled) {
+          llmStore.cancelGeneration(reqId).catch(() => {})
+          cleanup()
+          reject(new Error(i18n.t('base.workflowCancelled', { ns: 'commands' })))
+        }
+      }).catch(err => {
+        cleanup()
+        reject(err)
+      })
+    })
+  }
+
+  /**
+   * 带「截断续写」的 LLM 调用。
+   *
+   * 与 callLLM 的区别：模型输出撞上长度上限时不再整段失败，而是保留已产出的内容，
+   * 把结尾片段作为 assistant 消息回传，要求模型从断点继续；最多续写 maxRounds 轮后
+   * 拼成一份完整结果。适合章节蓝图、章节要点、角色卡、逆向推演这类「输出天然很长」的任务。
+   */
+  protected async callLLMWithContinuation(
+    prompt: string,
+    systemPrompt: string,
+    callbacks: StepCallbacks,
+    options?: { responseFormat?: { type: string }; thinking?: boolean; maxTokens?: number; purpose?: string; maxRounds?: number },
+    context?: WorkflowContext
+  ): Promise<string> {
+    const purpose = options?.purpose ?? this.constructor.name
+    const outcome = await generateWithContinuation(
+      async (ctx) => {
+        const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt },
+        ]
+        if (ctx.round > 0) {
+          // 把上一轮的结尾作为 assistant 消息回传，再追加续写指令，模型只需补写剩余内容
+          callbacks.log(i18n.t('segmented.continuationLog', { ns: 'commands', round: ctx.round }))
+          messages.push({ role: 'assistant', content: ctx.tail })
+          messages.push({ role: 'user', content: buildContinuationDirective(ctx.round) })
+        }
+        return this.generateStreamOnce(messages, callbacks, { ...options, purpose }, context)
+      },
+      {
+        maxRounds: options?.maxRounds,
+        isCancelled: () => context?.cancelled === true,
+      },
+    )
+
+    if (outcome.rounds > 1 && outcome.truncated) {
+      callbacks.log(i18n.t('segmented.continuationExhaustedLog', { ns: 'commands', rounds: outcome.rounds }))
+    } else if (outcome.rounds > 1) {
+      callbacks.log(i18n.t('segmented.continuationDoneLog', { ns: 'commands', rounds: outcome.rounds, length: outcome.text.length }))
+    }
+    return outcome.text
+  }
+
+  /**
    * 去除 DeepSeek 等模型的 <think> 标签，保证落盘纯净
    */
   protected stripThinkingTags(text: string): string {
@@ -145,7 +272,9 @@ export abstract class BaseWorkflowCommand<TResult = string> {
       
       return JSON.parse(cleanText) as T
     } catch {
-      throw new Error(i18n.t('base.jsonParseError', { ns: 'commands', tail: text.slice(-100) }))
+      // JSON 解析失败最常见的原因是「输出被长度上限截断」：把可识别的提示一并带上，
+      // 让上层能按「缩小范围重试」处理，而不是把整步判定为失败。
+      throw new Error(`${i18n.t('base.jsonParseError', { ns: 'commands', tail: text.slice(-100) })} ${i18n.t('segmented.outputIncomplete', { ns: 'commands' })}`)
     }
   }
 

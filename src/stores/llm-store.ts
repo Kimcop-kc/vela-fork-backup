@@ -1,59 +1,25 @@
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
-import { estimateTokens } from '../services/text-analysis'
-import type { ModelProfile, LLMResponse, TokenUsage } from '../shared/ipc-channels'
+import type { ModelProfile, LLMResponse, TokenUsage, LLMCompletionMeta, PurposeModelBindings } from '../shared/ipc-channels'
+import { categorizePurpose, pickModelIdForCategory, type PurposeCategory } from '../shared/purpose-routing'
 import i18n from '../i18n'
 
 /** 调用用途：用于统计面板里区分「这次 token 花在哪」 */
 export type LLMCallPurpose = string
 
-interface CallRecordInput {
-  modelId: string
-  modelName: string
-  purpose: LLMCallPurpose
-  /** 请求侧的文本（消息拼接），用于在供应商未返回 usage 时估算 */
-  promptText: string
-  /** 响应侧的文本 */
-  completionText: string
-  usage?: TokenUsage
-  durationMs: number
-  success: boolean
-  errorMessage?: string
-}
-
-/** 供应商没有返回 usage 时，用文本长度粗略估算，避免统计面板永远为 0 */
-function estimateUsage(promptText: string, completionText: string): TokenUsage {
-  const promptTokens = estimateTokens(promptText)
-  const completionTokens = estimateTokens(completionText)
-  return { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens }
-}
-
-/** 把一次调用写入 llm_calls 表（统计面板的数据来源） */
-function recordCall(input: CallRecordInput): void {
-  if (!ipc.isElectron) return
-  const usage = input.usage && input.usage.totalTokens > 0
-    ? input.usage
-    : estimateUsage(input.promptText, input.completionText)
-  const payload = {
-    modelId: input.modelId,
-    modelName: input.modelName,
-    purpose: input.purpose,
-    promptTokens: usage.promptTokens,
-    completionTokens: usage.completionTokens,
-    totalTokens: usage.totalTokens,
-    durationMs: input.durationMs,
-    success: input.success,
-    errorMessage: input.errorMessage ?? '',
-  }
-  // 统计失败不应影响生成流程，这里只静默忽略
-  Promise.resolve(ipc.invoke('db:log-llm-call', payload)).catch(() => undefined)
-}
+// 调用统计统一由主进程记录（electron/llm/call-log.ts）：Agent 循环、写作工具、
+// 章节彩排等不经过本 store 的调用也会被计入，这里不再重复写库。
 
 /** 流式生成的回调 */
 interface StreamCallbacks {
   onChunk?: (chunk: string) => void
-  onDone?: (fullText: string, usage?: TokenUsage) => void
+  onDone?: (fullText: string, usage?: TokenUsage, meta?: LLMCompletionMeta) => void
   onError?: (error: string) => void
+  /**
+   * 输出被长度上限截断时回调：拿到已产出的部分内容后可以续写补齐。
+   * 不提供时退回 onError（文案不变），保证既有调用方行为一致。
+   */
+  onTruncated?: (partialText: string, usage?: TokenUsage, meta?: LLMCompletionMeta) => void
 }
 
 interface LLMState {
@@ -63,6 +29,8 @@ interface LLMState {
   defaultModelId: string | null
   /** 当前默认向量模型 ID */
   defaultEmbeddingModelId: string | null
+  /** 用途 → 模型 id 绑定（多模型管理：先导入模型，再为每个用途挑选模型） */
+  purposeModels: PurposeModelBindings
   /** 正在进行的活跃请求 */
   activeRequests: Map<string, { status: 'running' | 'done' | 'error'; text: string }>
   /** 是否已加载模型配置 */
@@ -81,6 +49,12 @@ interface LLMState {
   setDefaultModel: (modelId: string) => void
   /** 设置默认向量模型（持久化到 ~/.vela/config.json） */
   setDefaultEmbeddingModel: (modelId: string) => void
+  /** 绑定某个用途使用的模型；传 null 解除绑定、回落到默认模型 */
+  setPurposeModel: (purpose: PurposeCategory, modelId: string | null) => Promise<void>
+  /** 解析某个用途实际使用的模型 id（用途绑定 → 默认模型 → 模型池） */
+  resolveModelId: (purpose?: string) => string | null
+  /** 解析某个用途实际使用的模型对象 */
+  modelForPurpose: (purpose?: string) => ModelProfile | undefined
   /** 非流式生成 */
   generate: (
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
@@ -104,6 +78,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   models: [],
   defaultModelId: null,
   defaultEmbeddingModelId: null,
+  purposeModels: {},
   activeRequests: new Map(),
   loaded: false,
 
@@ -112,11 +87,13 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     // 从 ~/.vela/ 加载模型列表和默认模型 ID
     await get().loadModels()
     if (ipc.isElectron) {
-      const [defaultId, defaultEmbeddingId] = await Promise.all([
-        ipc.invoke('llm:get-default-model'),
-        ipc.invoke('llm:get-default-embedding-model'),
+      // 任一通道不可用（例如旧版主进程）都不该让初始化整体失败，各自兜底
+      const [defaultId, defaultEmbeddingId, purposeModels] = await Promise.all([
+        ipc.invoke('llm:get-default-model').catch(() => null),
+        ipc.invoke('llm:get-default-embedding-model').catch(() => null),
+        ipc.invoke('llm:get-purpose-models').catch(() => ({} as PurposeModelBindings)),
       ])
-      set({ defaultModelId: defaultId, defaultEmbeddingModelId: defaultEmbeddingId, loaded: true })
+      set({ defaultModelId: defaultId, defaultEmbeddingModelId: defaultEmbeddingId, purposeModels, loaded: true })
     } else {
       set({ loaded: true })
     }
@@ -150,6 +127,12 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
         set({ defaultEmbeddingModelId: null })
         ipc.invoke('llm:set-default-embedding-model', null)
       }
+      // 清理指向已删除模型的用途绑定，避免路由到一个不存在的模型
+      const bindings = get().purposeModels
+      const stale = (Object.keys(bindings) as PurposeCategory[]).filter((key) => bindings[key] === modelId)
+      for (const key of stale) {
+        await get().setPurposeModel(key, null)
+      }
     }
     return result.success
   },
@@ -164,45 +147,50 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     ipc.invoke('llm:set-default-embedding-model', modelId)
   },
 
+  setPurposeModel: async (purpose, modelId) => {
+    // 先更新界面（乐观更新），再持久化到 ~/.vela/config.json
+    const next: PurposeModelBindings = { ...get().purposeModels }
+    if (modelId) next[purpose] = modelId
+    else delete next[purpose]
+    set({ purposeModels: next })
+    await ipc.invoke('llm:set-purpose-model', purpose, modelId).catch(() => undefined)
+  },
+
+  resolveModelId: (purpose) => pickModelIdForCategory(categorizePurpose(purpose), {
+    models: get().models,
+    bindings: get().purposeModels,
+    defaultModelId: get().defaultModelId,
+    defaultEmbeddingModelId: get().defaultEmbeddingModelId,
+  }),
+
+  modelForPurpose: (purpose) => {
+    const id = get().resolveModelId(purpose)
+    return id ? get().models.find((m) => m.id === id) : undefined
+  },
+
   generate: async (messages, modelId, options) => {
-    const mid = modelId ?? get().defaultModelId
+    // 未显式指定模型时按用途路由（用途绑定 → 默认模型 → 模型池）
+    const mid = modelId ?? get().resolveModelId(options?.purpose)
     if (!mid) return { success: false, content: '', error: i18n.t('llm.noDefaultModel', { ns: 'stores' }) }
-    const startedAt = Date.now()
-    const result = await ipc.invoke('llm:generate', {
+    return ipc.invoke('llm:generate', {
       modelId: mid,
       messages,
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
       thinking: options?.thinking,
-      maxTokens: options?.maxTokens
-    }) as LLMResponse
-
-    recordCall({
-      modelId: mid,
-      modelName: get().models.find(model => model.id === mid)?.name ?? mid,
-      purpose: options?.purpose ?? i18n.t('llm.purposeDefault', { ns: 'stores' }),
-      promptText: messages.map(message => message.content).join('\n'),
-      completionText: result?.content ?? '',
-      usage: result?.usage,
-      durationMs: Date.now() - startedAt,
-      success: result?.success !== false,
-      errorMessage: result?.error,
+      maxTokens: options?.maxTokens,
+      purpose: options?.purpose
     })
-
-    return result
   },
 
   generateStream: async (messages, callbacks, modelId, options) => {
-    const mid = modelId ?? get().defaultModelId
+    // 未显式指定模型时按用途路由（用途绑定 → 默认模型 → 模型池）
+    const mid = modelId ?? get().resolveModelId(options?.purpose)
     if (!mid) {
       callbacks.onError?.(i18n.t('llm.noDefaultModel', { ns: 'stores' }))
       return ''
     }
 
     const requestId = crypto.randomUUID()
-    const startedAt = Date.now()
-    const promptText = messages.map(message => message.content).join('\n')
-    const modelName = get().models.find(model => model.id === mid)?.name ?? mid
-    const purpose = options?.purpose ?? i18n.t('llm.purposeDefault', { ns: 'stores' })
 
     // 注册流式事件监听
     const unsubChunk = ipc.on('llm:stream-chunk', (data) => {
@@ -213,33 +201,26 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
     const unsubDone = ipc.on('llm:stream-done', (data) => {
       if (data.requestId === requestId) {
-        recordCall({
-          modelId: mid,
-          modelName,
-          purpose,
-          promptText,
-          completionText: data.fullText ?? '',
-          usage: data.usage,
-          durationMs: Date.now() - startedAt,
-          success: true,
-        })
-        callbacks.onDone?.(data.fullText, data.usage)
+        callbacks.onDone?.(data.fullText, data.usage, data.meta)
+        cleanup()
+      }
+    })
+
+    // 输出被长度上限截断：主进程把已产出的部分内容送回来，能续写的调用方据此补齐
+    const unsubTruncated = ipc.on('llm:stream-truncated', (data) => {
+      if (data.requestId === requestId) {
+        if (callbacks.onTruncated) {
+          callbacks.onTruncated(data.partialText, data.usage, data.meta)
+        } else {
+          // 未声明处理截断的调用方：退回原有报错行为
+          callbacks.onError?.(i18n.t('llm.outputTruncated', { ns: 'stores' }))
+        }
         cleanup()
       }
     })
 
     const unsubError = ipc.on('llm:stream-error', (data) => {
       if (data.requestId === requestId) {
-        recordCall({
-          modelId: mid,
-          modelName,
-          purpose,
-          promptText,
-          completionText: '',
-          durationMs: Date.now() - startedAt,
-          success: false,
-          errorMessage: data.error,
-        })
         callbacks.onError?.(data.error)
         cleanup()
       }
@@ -248,6 +229,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     const cleanup = () => {
       unsubChunk()
       unsubDone()
+      unsubTruncated()
       unsubError()
       const reqs = new Map(get().activeRequests)
       reqs.delete(requestId)
@@ -266,22 +248,13 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       stream: true,
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
       thinking: options?.thinking,
-      maxTokens: options?.maxTokens
+      maxTokens: options?.maxTokens,
+      purpose: options?.purpose
     })) as { requestId: string; started: boolean } | undefined
 
     // 模型未找到/未配置时主进程直接返回 started:false，不会发任何流事件；
     // 必须主动报错，否则调用方会永远等待 onDone/onError
     if (startRes && startRes.started === false) {
-      recordCall({
-        modelId: mid,
-        modelName,
-        purpose,
-        promptText,
-        completionText: '',
-        durationMs: Date.now() - startedAt,
-        success: false,
-        errorMessage: i18n.t('llm.modelNotFound', { ns: 'stores' }),
-      })
       callbacks.onError?.(i18n.t('llm.modelNotFound', { ns: 'stores' }))
       cleanup()
     }

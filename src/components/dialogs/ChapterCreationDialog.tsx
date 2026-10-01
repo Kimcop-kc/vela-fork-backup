@@ -32,7 +32,8 @@ const CREATION_LOG_REL = '.vela/chapter_creation_log.json'
 export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Props) {
   const { t } = useTranslation('dialogs')
   const currentProject = useProjectStore(s => s.currentProject)
-  const defaultModelId = useLLMStore(s => s.defaultModelId)
+  // 按用途解析模型：用途绑定 / 默认模型任一可用即视为已配置
+  const resolveModelId = useLLMStore(s => s.resolveModelId)
   // ✅ action 用 getState() 获取，不订阅 workflow store 高频更新
   const startWorkflow = useWorkflowStore.getState().startWorkflow
   const addLog = useWorkflowStore.getState().addLog
@@ -152,7 +153,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
   }
 
   const handleStart = async () => {
-    if (!defaultModelId) {
+    if (!resolveModelId('chapter_blueprint')) {
       addLog('error', t('chapterCreation.needModel'))
       return
     }

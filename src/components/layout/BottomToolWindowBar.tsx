@@ -17,8 +17,9 @@ export default function BottomToolWindowBar() {
   // Bottom tabs
   const bottomTabs: Array<{ id: BottomTab; icon: typeof Zap; label: string }> = [
     { id: 'tasks',  icon: Zap,        label: t('statusBar.tasksLabel')    },
-    { id: 'log',    icon: ScrollText, label: t('bottomPanel.tabs.log')    },
-    { id: 'models', icon: Cpu,        label: t('bottomPanel.tabs.models')    },
+    // 底栏标签文案维护在 panels 命名空间下，这里显式指定 ns，避免回退成原始 key
+    { id: 'log',    icon: ScrollText, label: t('bottomPanel.tabs.log', { ns: 'panels' })    },
+    { id: 'models', icon: Cpu,        label: t('bottomPanel.tabs.models', { ns: 'panels' })    },
   ]
 
   return (

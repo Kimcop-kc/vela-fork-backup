@@ -61,7 +61,7 @@ export class CompileStyleGuideCommand extends BaseWorkflowCommand<StyleGuide> {
       : t('styleGuide.skillFallback'))
 
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
-    const defaultModel = llmStore.models.find(m => m.id === llmStore.defaultModelId)
+    const defaultModel = llmStore.modelForPurpose('compile_style_guide')
     const budgets = resolveGenerationBudgets(defaultModel?.maxTokens)
 
     // ── 分段归纳：参考文本可能很长，逐段归纳后合并规则 ──

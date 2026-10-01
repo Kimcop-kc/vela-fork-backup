@@ -54,10 +54,10 @@ interface InferSampleField {
   text: string
 }
 
-/** 读取当前默认模型的 token 预算，供分段生成使用 */
+/** 读取「逆向推演」用途模型的 token 预算，供分段生成使用 */
 function currentGenerationBudgets() {
   const llmStore = useLLMStore.getState()
-  const model = llmStore.models.find(m => m.id === llmStore.defaultModelId)
+  const model = llmStore.modelForPurpose('infer_novel_config')
   return resolveGenerationBudgets(model?.maxTokens)
 }
 
@@ -261,7 +261,8 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         .withTotalChapters(chapters.length)
         // 兼容旧版 Prompt 的 sample_content 变量
         .withSampleContent(group.map(field => `【${field.label}】\n${field.text}`).join('\n\n'))
-      const rawResult = await this.callLLM(
+      // 推演结果 JSON 天然较长，撞上输出上限时自动续写补齐，避免字段大面积缺失
+      const rawResult = await this.callLLMWithContinuation(
         builder.build() + directive,
         template.systemRole || '你是一位顶级网文主编和资深阅读分析师。',
         callbacks,
@@ -487,7 +488,8 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
             .withChapterTitle(ch.title)
             .withNovelConfigSummary(configSummary)
             .build() + directive
-          const rawResult = await this.callLLM(
+          // 单章蓝图同样可能超长：截断时续写补齐，而不是整章重来
+          const rawResult = await this.callLLMWithContinuation(
             prompt,
             template.systemRole || '你是一位专业的网文结构分析师。',
             callbacks,

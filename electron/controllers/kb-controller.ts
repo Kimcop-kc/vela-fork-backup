@@ -4,16 +4,25 @@ import {
   importDocument, importFolder, importText, searchKnowledge, searchKnowledgeFTS,
   listDocuments, removeDocument, getKnowledgeStats,
   getVectorlessCount, backfillVectors,
+  getDocumentText,
 } from '../knowledge-base'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH } from '../utils/config-utils'
+import { deconstructBook, listBooks, removeBook } from '../book-deconstruct'
 import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
+import { pickModelIdForCategory } from '../../src/shared/purpose-routing'
 
 function getEmbeddingConfig(): { protocol: 'openai' | 'gemini'; model: { baseUrl: string; apiKey: string; modelName: string } } | null {
   const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
-  const targetModelId = config.defaultEmbeddingModelId || config.defaultModelId
+  const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+  // 与渲染进程共用同一条回退链：用途绑定 → 默认向量模型 → 声明向量能力的模型 → 默认生成模型
+  const targetModelId = pickModelIdForCategory('embedding', {
+    models,
+    bindings: config.purposeModels ?? {},
+    defaultModelId: config.defaultModelId ?? null,
+    defaultEmbeddingModelId: config.defaultEmbeddingModelId ?? null,
+  })
   if (!targetModelId) return null
 
-  const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
   const model = models.find((m) => m.id === targetModelId)
   if (!model) return null
   return {
@@ -108,6 +117,39 @@ export function registerKBController() {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, processed: 0, failed: 0, error: '未打开项目' }
     return backfillVectors(projectPath, embConfig.protocol, embConfig.model)
+  })
+
+  // ===== 拆书知识库 =====
+
+  /** 拆书：把参考小说按章拆开并写入本地知识库，同时留一份拆书档案 */
+  ipcMain.handle('kb:deconstruct-book', async (_event, filePath: string) => {
+    const projectPath = getCurrentProjectPath()
+    if (!projectPath) return { success: false, error: '未打开项目' }
+    const embConfig = getEmbeddingConfig()
+    const protocol = embConfig?.protocol ?? 'openai'
+    const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
+    return deconstructBook(filePath, projectPath, protocol, model)
+  })
+
+  /** 列出本项目已有的拆书档案 */
+  ipcMain.handle('kb:list-books', async () => {
+    const projectPath = getCurrentProjectPath()
+    if (!projectPath) return []
+    return listBooks(projectPath)
+  })
+
+  /** 按文档 id 取回整篇正文（拆书章节回看 / 作为文风参考） */
+  ipcMain.handle('kb:get-document-text', async (_event, docId: string) => {
+    const projectPath = getCurrentProjectPath()
+    if (!projectPath) return { success: false, error: '未打开项目' }
+    return getDocumentText(docId, projectPath)
+  })
+
+  /** 移除一本拆书（档案 + 知识库中的章节） */
+  ipcMain.handle('kb:remove-book', async (_event, bookId: string) => {
+    const projectPath = getCurrentProjectPath()
+    if (!projectPath) return { success: false, removedChapters: 0, error: '未打开项目' }
+    return removeBook(bookId, projectPath)
   })
 
   ipcMain.handle('dialog:select-files', async () => {

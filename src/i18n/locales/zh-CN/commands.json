@@ -276,6 +276,14 @@
     "chapterRefineTitle": "🔧 修稿 — 第{{chapter}}章 {{title}}",
     "chapterRefineStepName": "修稿",
     "chapterRefineStepDesc": "将草稿提升到大神级质量，保存修稿并打开合并视图",
+    "skillInvokeTitle": "🧩 Skill — {{skill}}",
+    "skillInvokeStepName": "调用 Skill：{{skill}}",
+    "skillInvokeStepDesc": "按该 Skill 的方法处理当前章节正文，结果输出到 AI 输出面板",
+    "skillPipelineTitle": "🧩 流水线 — {{name}}",
+    "skillPipelineStepName": "第 {{index}} 步：{{skill}}",
+    "skillPipelineStepDescChapter": "输入：本章正文",
+    "skillPipelineStepDescPrevious": "输入：上一步的输出",
+    "skillPipelineStepDone": "第 {{index}} 步完成，输出 {{chars}} 字",
     "chapterReviewFixTitle": "🔧 审稿修复 — 第{{chapter}}章 {{title}}",
     "chapterReviewFixStepName": "审稿驱动修稿",
     "chapterReviewFixStepDesc": "根据审稿报告精准修复问题调用 Command",
@@ -404,7 +412,14 @@
       "shrinkLog": "⚠️ 第 {{from}}–{{to}} 章输出不完整，缩小本次范围后重试…",
       "chunkLog": "分段生成：第 {{index}}/{{total}} 段…",
       "chunkDoneLog": "分段生成完成：共 {{total}} 段，已合并为完整结果。",
-      "chunkFallbackLog": "分段第 {{index}} 段失败，已保留其余 {{done}} 段结果：{{error}}"
+    "chunkFallbackLog": "分段第 {{index}} 段失败，已保留其余 {{done}} 段结果：{{error}}",
+    "continuationHeader": "【续写】上一次输出因长度上限被截断，这是第 {{round}} 次续写。",
+    "continuationBody": "请紧接上面的结尾继续输出剩余内容：不要重复已输出的部分，不要重新开头，不要解释，直接输出后续内容。",
+    "continuationLog": "✂️ 输出被长度上限截断，正在续写（第 {{round}} 次）…",
+    "continuationDoneLog": "✂️ 续写完成：共 {{rounds}} 轮，最终长度 {{length}} 字符。",
+    "continuationExhaustedLog": "⚠️ 已达最大续写轮数（{{rounds}}），结果仍可能不完整。"
+,
+    "outputIncomplete": "模型输出达到长度上限，结果不完整，未提交本轮操作。请分段改写或增加模型输出上限。"
     },
   "review": {
     "chapterSource": "第 {{chapter}} 章",
@@ -535,5 +550,15 @@
     "tabName": "第 {{chapter}} 章 · 去 AI 味修订",
     "completed": "已生成待审阅修订 v{{version}}（{{length}} 字），请在对比视图中确认后再采用。",
     "baseDraftMissing": "⚠️ 未找到基准草稿，修订结果未落盘。"
+  },
+  "invokeSkill": {
+    "noSkill": "没有可用的 Skill 方法（该 Skill 可能已被停用）",
+    "systemPrompt": "你在执行「{{skill}}」这一套写作方法。严格按该方法处理用户给出的文本，直接输出处理结果：不要复述原文，不要解释你的做法，不要添加与任务无关的内容。",
+    "started": "开始调用 Skill：{{skill}}",
+    "taskHeader": "【本次任务】{{task}}",
+    "argsBlock": "【调用参数】\n{{args}}",
+    "targetBlock": "【目标文本{{part}}】\n{{text}}",
+    "outputRule": "直接输出处理结果本身。",
+    "partLabel": "（第 {{index}}/{{total}} 段）"
   }
 }
